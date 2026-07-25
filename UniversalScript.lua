@@ -121,11 +121,13 @@ local crosshairEnabled = false
 local flingEnabled = false
 local walkFlingEnabled = false
 local staffDetection = true
+local fovValue = 70
 local configs = {}
 local ESP = {Boxes = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
 local crosshairDrawing = nil
 local flyBodyVelocity = nil
 local flyBodyGyro = nil
+local rainbowConnection = nil
 
 local function shouldAffectPlayer(targetPlayer)
 	if targetPlayer == LocalPlayer then return false end
@@ -698,21 +700,39 @@ end)
 
 additionals_tab:Toggle({
 	Title = "Fling",
-	Desc = "Classic fling",
+	Desc = "Classic Infinite Yield style fling",
 	Type = "Checkbox",
 	Value = false,
 	Callback = function(state)
 		flingEnabled = state
+		if not state then
+			local char = LocalPlayer.Character
+			if char and char:FindFirstChild("HumanoidRootPart") then
+				char.HumanoidRootPart.RotVelocity = Vector3.zero
+				char.HumanoidRootPart.Velocity = Vector3.zero
+			end
+		end
 	end
 })
 
 additionals_tab:Toggle({
 	Title = "Walk Fling",
-	Desc = "Fling while walking (no spin)",
+	Desc = "Fling people while walking (no spinning)",
 	Type = "Checkbox",
 	Value = false,
 	Callback = function(state)
 		walkFlingEnabled = state
+	end
+})
+
+additionals_tab:Slider({
+	Title = "FOV",
+	Desc = "Change camera field of view",
+	Step = 1,
+	Value = { Min = 70, Max = 120, Default = 70 },
+	Callback = function(value)
+		fovValue = value
+		Camera.FieldOfView = value
 	end
 })
 
@@ -790,21 +810,23 @@ for _, player in ipairs(Players:GetPlayers()) do
 end
 
 RunService.Heartbeat:Connect(function()
-	if flingEnabled or walkFlingEnabled then
-		local char = LocalPlayer.Character
-		if char and char:FindFirstChild("HumanoidRootPart") then
-			local root = char.HumanoidRootPart
-			if flingEnabled then
-				root.Velocity = Vector3.new(0, 0, 0)
-				root.RotVelocity = Vector3.new(9e9, 9e9, 9e9)
-			elseif walkFlingEnabled then
-				for _, player in ipairs(Players:GetPlayers()) do
-					if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-						local dist = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
-						if dist < 8 then
-							player.Character.HumanoidRootPart.Velocity = Vector3.new(0, 100, 0) + (player.Character.HumanoidRootPart.Position - root.Position).Unit * 150
-						end
-					end
+	local char = LocalPlayer.Character
+	if not char then return end
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+
+	if flingEnabled then
+		root.Velocity = Vector3.new(0, 0, 0)
+		root.RotVelocity = Vector3.new(0, 9e9, 0)
+	end
+
+	if walkFlingEnabled then
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+				local otherRoot = player.Character.HumanoidRootPart
+				local dist = (otherRoot.Position - root.Position).Magnitude
+				if dist < 10 then
+					otherRoot.Velocity = (otherRoot.Position - root.Position).Unit * 200 + Vector3.new(0, 100, 0)
 				end
 			end
 		end
@@ -915,7 +937,8 @@ config_tab:Button({
 			walkSpeed = walkSpeed,
 			showHealth = showHealth,
 			showName = showName,
-			showDistance = showDistance
+			showDistance = showDistance,
+			fovValue = fovValue
 		}
 		configs[selectedConfig] = data
 		table.insert(configNames, selectedConfig)
@@ -941,6 +964,8 @@ config_tab:Dropdown({
 			showHealth = c.showHealth or false
 			showName = c.showName or false
 			showDistance = c.showDistance or false
+			fovValue = c.fovValue or 70
+			Camera.FieldOfView = fovValue
 			WindUI:Notify({Title = "Config", Content = "Loaded: " .. name, Duration = 3})
 		end
 	end
@@ -1041,4 +1066,4 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-print("Universal Script Loaded Twn")
+print("Universal Script Loaded!")
