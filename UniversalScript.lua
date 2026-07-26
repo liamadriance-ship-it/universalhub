@@ -191,7 +191,7 @@ hitbox_tab:Slider({
 	Title = "Head Size",
 	Desc = "Higher = bigger hitbox",
 	Step = 1,
-	Value = { Min = 5, Max = 25, Default = 13 },
+	Value = { Min = 5, Max = 100, Default = 13 },
 	Callback = function(value) size = value end
 })
 
