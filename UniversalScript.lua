@@ -191,7 +191,7 @@ hitbox_tab:Slider({
 	Title = "Head Size",
 	Desc = "Higher = bigger hitbox",
 	Step = 1,
-	Value = { Min = 5, Max = 100, Default = 13 },
+	Value = { Min = 5, Max = 25, Default = 13 },
 	Callback = function(value) size = value end
 })
 
@@ -238,32 +238,54 @@ teams_tab:Button({
 	end
 })
 
+local function removePlayerESP(player)
+	if ESP.Boxes[player] then
+		ESP.Boxes[player]:Remove()
+		ESP.Boxes[player] = nil
+	end
+	if ESP.Tracers[player] then
+		ESP.Tracers[player]:Remove()
+		ESP.Tracers[player] = nil
+	end
+	if ESP.HealthBars[player] then
+		ESP.HealthBars[player]:Remove()
+		ESP.HealthBars[player] = nil
+	end
+	if ESP.Names[player] then
+		ESP.Names[player]:Remove()
+		ESP.Names[player] = nil
+	end
+	if ESP.Distances[player] then
+		ESP.Distances[player]:Remove()
+		ESP.Distances[player] = nil
+	end
+end
+
 local function clearVisuals()
-	for _, v in pairs(ESP.Boxes) do if v then v:Remove() end end
-	for _, v in pairs(ESP.Tracers) do if v then v:Remove() end end
-	for _, v in pairs(ESP.HealthBars) do if v then v:Remove() end end
-	for _, v in pairs(ESP.Names) do if v then v:Remove() end end
-	for _, v in pairs(ESP.Distances) do if v then v:Remove() end end
-	ESP.Boxes = {}
-	ESP.Tracers = {}
-	ESP.HealthBars = {}
-	ESP.Names = {}
-	ESP.Distances = {}
+	for player, _ in pairs(ESP.Boxes) do
+		removePlayerESP(player)
+	end
 end
 
 local function updateVisuals()
 	if not espEnabled and not tracersEnabled then return end
+
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == LocalPlayer then continue end
+
 		local character = player.Character
-		if not character then continue end
-		local rootPart = character:FindFirstChild("HumanoidRootPart")
-		local humanoid = character:FindFirstChild("Humanoid")
-		local head = character:FindFirstChild("Head")
-		if not rootPart or not humanoid or humanoid.Health <= 0 then continue end
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+		local head = character and character:FindFirstChild("Head")
+
+		if not character or not humanoid or humanoid.Health <= 0 or not rootPart then
+			removePlayerESP(player)
+			continue
+		end
 
 		local boxColor = player.Team and player.Team.TeamColor.Color or Color3.new(1, 0, 0)
 		local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+
 		if not onScreen then
 			if ESP.Boxes[player] then ESP.Boxes[player].Visible = false end
 			if ESP.Tracers[player] then ESP.Tracers[player].Visible = false end
@@ -344,6 +366,11 @@ local function updateVisuals()
 			elseif ESP.Distances[player] then
 				ESP.Distances[player].Visible = false
 			end
+		else
+			if ESP.Boxes[player] then ESP.Boxes[player].Visible = false end
+			if ESP.HealthBars[player] then ESP.HealthBars[player].Visible = false end
+			if ESP.Names[player] then ESP.Names[player].Visible = false end
+			if ESP.Distances[player] then ESP.Distances[player].Visible = false end
 		end
 
 		if tracersEnabled then
@@ -475,6 +502,7 @@ Players.PlayerAdded:Connect(function(player)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
+	removePlayerESP(player)
 	pcall(function()
 		spectateDropdown:SetValues(getPlayerList())
 	end)
@@ -1018,19 +1046,14 @@ end)
 
 RunService.RenderStepped:Connect(updateVisuals)
 
-Players.PlayerRemoving:Connect(function(player)
-	if ESP.Boxes[player] then ESP.Boxes[player]:Remove() ESP.Boxes[player] = nil end
-	if ESP.Tracers[player] then ESP.Tracers[player]:Remove() ESP.Tracers[player] = nil end
-	if ESP.HealthBars[player] then ESP.HealthBars[player]:Remove() ESP.HealthBars[player] = nil end
-	if ESP.Names[player] then ESP.Names[player]:Remove() ESP.Names[player] = nil end
-	if ESP.Distances[player] then ESP.Distances[player]:Remove() ESP.Distances[player] = nil end
-end)
-
 Players.PlayerAdded:Connect(function(newPlayer)
 	if newPlayer == LocalPlayer then return end
 	newPlayer.CharacterAdded:Connect(function()
 		task.wait(0.6)
 		if expanded then ResizeHead(newPlayer, size) end
+	end)
+	newPlayer.CharacterRemoving:Connect(function()
+		removePlayerESP(newPlayer)
 	end)
 end)
 
@@ -1039,6 +1062,9 @@ for _, plr in Players:GetPlayers() do
 		plr.CharacterAdded:Connect(function()
 			task.wait(0.6)
 			if expanded then ResizeHead(plr, size) end
+		end)
+		plr.CharacterRemoving:Connect(function()
+			removePlayerESP(plr)
 		end)
 	end
 end
