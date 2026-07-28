@@ -152,13 +152,27 @@ local function ResizeHead(targetPlayer, newSize)
 		end
 		return
 	end
+
 	local character = targetPlayer.Character
 	if not character then return end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local head = character:FindFirstChild("Head")
 	if not head then return end
+
+	-- Don't expand dead players
+	if humanoid and humanoid.Health <= 0 then
+		if originalSizes[head] then
+			head.Size = originalSizes[head]
+			head.Transparency = 1
+		end
+		return
+	end
+
 	if not originalSizes[head] then
 		originalSizes[head] = head.Size
 	end
+
 	if newSize <= 0 then
 		head.Size = originalSizes[head]
 		head.Transparency = 1
