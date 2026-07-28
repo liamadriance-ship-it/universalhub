@@ -131,7 +131,7 @@ local fovValue = 70
 local scpOutlineEnabled = false
 local instantProximity = false
 local configs = {}
-local ESP = {Highlights = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
+local ESP = {Highlights = {}, FakeHeads = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
 local SCPHighlights = {}
 local crosshairDrawing = nil
 local flyBodyVelocity = nil
@@ -267,6 +267,10 @@ local function removePlayerESP(player)
 		ESP.Highlights[player]:Destroy()
 		ESP.Highlights[player] = nil
 	end
+	if ESP.FakeHeads[player] then
+		ESP.FakeHeads[player]:Destroy()
+		ESP.FakeHeads[player] = nil
+	end
 	if ESP.Tracers[player] then
 		ESP.Tracers[player]:Remove()
 		ESP.Tracers[player] = nil
@@ -300,7 +304,7 @@ local function updateVisuals()
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-		local head = character and character:FindFirstChild("Head")
+		local realHead = character and character:FindFirstChild("Head")
 
 		if not character or not humanoid or humanoid.Health <= 0 or not rootPart then
 			removePlayerESP(player)
@@ -320,6 +324,26 @@ local function updateVisuals()
 		end
 
 		if outlineEnabled then
+			-- Create a fake normal-sized head for the outline only
+			if not ESP.FakeHeads[player] and realHead then
+				local fakeHead = realHead:Clone()
+				fakeHead.Name = "FakeOutlineHead"
+				fakeHead.Size = originalSizes[realHead] or Vector3.new(1.2, 1.2, 1.2)
+				fakeHead.Transparency = 1
+				fakeHead.CanCollide = false
+				fakeHead.Massless = true
+				fakeHead.Anchored = false
+				fakeHead.Parent = character
+
+				local weld = Instance.new("Weld")
+				weld.Part0 = realHead
+				weld.Part1 = fakeHead
+				weld.C0 = CFrame.new()
+				weld.Parent = fakeHead
+
+				ESP.FakeHeads[player] = fakeHead
+			end
+
 			if not ESP.Highlights[player] then
 				local highlight = Instance.new("Highlight")
 				highlight.FillTransparency = 1
@@ -328,15 +352,20 @@ local function updateVisuals()
 				highlight.Parent = character
 				ESP.Highlights[player] = highlight
 			end
+
 			local highlight = ESP.Highlights[player]
 			highlight.OutlineColor = teamColor
 			highlight.Enabled = true
-			highlight.Parent = character
+
+			-- Make the highlight use the fake normal head instead of the real expanded one
+			if ESP.FakeHeads[player] then
+				highlight.Adornee = character
+			end
 		elseif ESP.Highlights[player] then
 			ESP.Highlights[player].Enabled = false
 		end
 
-		local topPos = head and Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0)) or rootPos
+		local topPos = realHead and Camera:WorldToViewportPoint(realHead.Position + Vector3.new(0, 0.5, 0)) or rootPos
 		local legPart = character:FindFirstChild("LeftFoot") or character:FindFirstChild("LeftLowerLeg")
 		local bottomPos = legPart and Camera:WorldToViewportPoint(legPart.Position - Vector3.new(0, 0.5, 0)) or rootPos
 		local height = math.abs(topPos.Y - bottomPos.Y)
@@ -412,7 +441,7 @@ end
 
 visual_tab:Toggle({
 	Title = "Player Outline ESP",
-	Desc = "Team colored outline of the player",
+	Desc = "Team colored outline (normal sized head)",
 	Type = "Checkbox",
 	Value = false,
 	Callback = function(state)
