@@ -106,7 +106,7 @@ local transparency = 0.5
 local expanded = false
 local selectedTeams = {}
 local originalSizes = {}
-local outlineEnabled = false
+local boxEspEnabled = false
 local showHealth = false
 local showName = false
 local showDistance = false
@@ -131,7 +131,7 @@ local fovValue = 70
 local scpOutlineEnabled = false
 local instantProximity = false
 local configs = {}
-local ESP = {Highlights = {}, FakeHeads = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
+local ESP = {Boxes = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
 local SCPHighlights = {}
 local crosshairDrawing = nil
 local flyBodyVelocity = nil
@@ -263,13 +263,9 @@ teams_tab:Button({
 })
 
 local function removePlayerESP(player)
-	if ESP.Highlights[player] then
-		ESP.Highlights[player]:Destroy()
-		ESP.Highlights[player] = nil
-	end
-	if ESP.FakeHeads[player] then
-		ESP.FakeHeads[player]:Destroy()
-		ESP.FakeHeads[player] = nil
+	if ESP.Boxes[player] then
+		ESP.Boxes[player]:Remove()
+		ESP.Boxes[player] = nil
 	end
 	if ESP.Tracers[player] then
 		ESP.Tracers[player]:Remove()
@@ -290,13 +286,13 @@ local function removePlayerESP(player)
 end
 
 local function clearVisuals()
-	for player, _ in pairs(ESP.Highlights) do
+	for player, _ in pairs(ESP.Boxes) do
 		removePlayerESP(player)
 	end
 end
 
 local function updateVisuals()
-	if not outlineEnabled and not tracersEnabled then return end
+	if not boxEspEnabled and not tracersEnabled then return end
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == LocalPlayer then continue end
@@ -304,18 +300,18 @@ local function updateVisuals()
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-		local realHead = character and character:FindFirstChild("Head")
+		local head = character and character:FindFirstChild("Head")
 
 		if not character or not humanoid or humanoid.Health <= 0 or not rootPart then
 			removePlayerESP(player)
 			continue
 		end
 
-		local teamColor = player.Team and player.Team.TeamColor.Color or Color3.new(1, 0, 0)
+		local boxColor = player.Team and player.Team.TeamColor.Color or Color3.new(1, 0, 0)
 		local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
 
 		if not onScreen then
-			if ESP.Highlights[player] then ESP.Highlights[player].Enabled = false end
+			if ESP.Boxes[player] then ESP.Boxes[player].Visible = false end
 			if ESP.Tracers[player] then ESP.Tracers[player].Visible = false end
 			if ESP.HealthBars[player] then ESP.HealthBars[player].Visible = false end
 			if ESP.Names[player] then ESP.Names[player].Visible = false end
@@ -323,103 +319,82 @@ local function updateVisuals()
 			continue
 		end
 
-		if outlineEnabled then
-			-- Create a fake normal-sized head for the outline only
-			if not ESP.FakeHeads[player] and realHead then
-				local fakeHead = realHead:Clone()
-				fakeHead.Name = "FakeOutlineHead"
-				fakeHead.Size = originalSizes[realHead] or Vector3.new(1.2, 1.2, 1.2)
-				fakeHead.Transparency = 1
-				fakeHead.CanCollide = false
-				fakeHead.Massless = true
-				fakeHead.Anchored = false
-				fakeHead.Parent = character
-
-				local weld = Instance.new("Weld")
-				weld.Part0 = realHead
-				weld.Part1 = fakeHead
-				weld.C0 = CFrame.new()
-				weld.Parent = fakeHead
-
-				ESP.FakeHeads[player] = fakeHead
-			end
-
-			if not ESP.Highlights[player] then
-				local highlight = Instance.new("Highlight")
-				highlight.FillTransparency = 1
-				highlight.OutlineTransparency = 0
-				highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-				highlight.Parent = character
-				ESP.Highlights[player] = highlight
-			end
-
-			local highlight = ESP.Highlights[player]
-			highlight.OutlineColor = teamColor
-			highlight.Enabled = true
-
-			-- Make the highlight use the fake normal head instead of the real expanded one
-			if ESP.FakeHeads[player] then
-				highlight.Adornee = character
-			end
-		elseif ESP.Highlights[player] then
-			ESP.Highlights[player].Enabled = false
-		end
-
-		local topPos = realHead and Camera:WorldToViewportPoint(realHead.Position + Vector3.new(0, 0.5, 0)) or rootPos
+		local topPos = head and Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0)) or rootPos
 		local legPart = character:FindFirstChild("LeftFoot") or character:FindFirstChild("LeftLowerLeg")
 		local bottomPos = legPart and Camera:WorldToViewportPoint(legPart.Position - Vector3.new(0, 0.5, 0)) or rootPos
 		local height = math.abs(topPos.Y - bottomPos.Y)
+		local width = height * 0.6
 
-		if showHealth and outlineEnabled then
-			if not ESP.HealthBars[player] then
-				local bar = Drawing.new("Square")
-				bar.Filled = true
-				bar.Thickness = 1
-				ESP.HealthBars[player] = bar
+		if boxEspEnabled then
+			if not ESP.Boxes[player] then
+				local box = Drawing.new("Square")
+				box.Thickness = 2
+				box.Filled = false
+				box.Transparency = 1
+				ESP.Boxes[player] = box
 			end
-			local bar = ESP.HealthBars[player]
-			local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-			bar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
-			bar.Size = Vector2.new(4, height * healthPercent)
-			bar.Position = Vector2.new(rootPos.X + 25, topPos.Y + height * (1 - healthPercent))
-			bar.Visible = true
-		elseif ESP.HealthBars[player] then
-			ESP.HealthBars[player].Visible = false
-		end
+			local box = ESP.Boxes[player]
+			box.Color = boxColor
+			box.Size = Vector2.new(width, height)
+			box.Position = Vector2.new(rootPos.X - width/2, topPos.Y)
+			box.Visible = true
 
-		if showName and outlineEnabled then
-			if not ESP.Names[player] then
-				local name = Drawing.new("Text")
-				name.Size = 14
-				name.Center = true
-				name.Outline = true
-				ESP.Names[player] = name
+			if showHealth then
+				if not ESP.HealthBars[player] then
+					local bar = Drawing.new("Square")
+					bar.Filled = true
+					bar.Thickness = 1
+					ESP.HealthBars[player] = bar
+				end
+				local bar = ESP.HealthBars[player]
+				local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+				bar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
+				bar.Size = Vector2.new(4, height * healthPercent)
+				bar.Position = Vector2.new(rootPos.X + width/2 + 3, topPos.Y + height * (1 - healthPercent))
+				bar.Visible = true
+			elseif ESP.HealthBars[player] then
+				ESP.HealthBars[player].Visible = false
 			end
-			local name = ESP.Names[player]
-			name.Text = player.Name
-			name.Color = teamColor
-			name.Position = Vector2.new(rootPos.X, topPos.Y - 16)
-			name.Visible = true
-		elseif ESP.Names[player] then
-			ESP.Names[player].Visible = false
-		end
 
-		if showDistance and outlineEnabled then
-			if not ESP.Distances[player] then
-				local dist = Drawing.new("Text")
-				dist.Size = 13
-				dist.Center = true
-				dist.Outline = true
-				ESP.Distances[player] = dist
+			if showName then
+				if not ESP.Names[player] then
+					local name = Drawing.new("Text")
+					name.Size = 14
+					name.Center = true
+					name.Outline = true
+					ESP.Names[player] = name
+				end
+				local name = ESP.Names[player]
+				name.Text = player.Name
+				name.Color = boxColor
+				name.Position = Vector2.new(rootPos.X, topPos.Y - 16)
+				name.Visible = true
+			elseif ESP.Names[player] then
+				ESP.Names[player].Visible = false
 			end
-			local dist = ESP.Distances[player]
-			local distance = math.floor((rootPart.Position - Camera.CFrame.Position).Magnitude)
-			dist.Text = distance .. " studs"
-			dist.Color = Color3.new(1, 1, 1)
-			dist.Position = Vector2.new(rootPos.X, bottomPos.Y + 4)
-			dist.Visible = true
-		elseif ESP.Distances[player] then
-			ESP.Distances[player].Visible = false
+
+			if showDistance then
+				if not ESP.Distances[player] then
+					local dist = Drawing.new("Text")
+					dist.Size = 13
+					dist.Center = true
+					dist.Outline = true
+					ESP.Distances[player] = dist
+				end
+				local dist = ESP.Distances[player]
+				local distance = math.floor((rootPart.Position - Camera.CFrame.Position).Magnitude)
+				dist.Text = distance .. " studs"
+				dist.Color = Color3.new(1, 1, 1)
+				dist.Position = Vector2.new(rootPos.X, bottomPos.Y + 4)
+				dist.Visible = true
+			elseif ESP.Distances[player] then
+				ESP.Distances[player].Visible = false
+			end
+		else
+			if ESP.Boxes[player] then ESP.Boxes[player].Visible = false end
+			if ESP.HealthBars[player] then ESP.HealthBars[player].Visible = false end
+			if ESP.Names[player] then ESP.Names[player].Visible = false end
+			if ESP.Distances[player] then ESP.Distances[player].Visible = false end
 		end
 
 		if tracersEnabled then
@@ -429,7 +404,7 @@ local function updateVisuals()
 				ESP.Tracers[player] = tracer
 			end
 			local tracer = ESP.Tracers[player]
-			tracer.Color = teamColor
+			tracer.Color = boxColor
 			tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
 			tracer.To = Vector2.new(rootPos.X, rootPos.Y)
 			tracer.Visible = true
@@ -440,12 +415,12 @@ local function updateVisuals()
 end
 
 visual_tab:Toggle({
-	Title = "Player Outline ESP",
-	Desc = "Team colored outline (normal sized head)",
+	Title = "Box ESP",
+	Desc = "Classic box ESP",
 	Type = "Checkbox",
 	Value = false,
 	Callback = function(state)
-		outlineEnabled = state
+		boxEspEnabled = state
 		if not state then clearVisuals() end
 	end
 })
@@ -465,7 +440,7 @@ visual_tab:Toggle({
 
 visual_tab:Toggle({
 	Title = "Show Health Bar",
-	Desc = "Health bar next to player",
+	Desc = "Health bar next to box",
 	Type = "Checkbox",
 	Value = false,
 	Callback = function(state) showHealth = state end
