@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
@@ -95,7 +96,6 @@ local theme_tab = window:Tab({ Title = "Theme", Icon = "palette" })
 local config_tab = window:Tab({ Title = "Config", Icon = "save" })
 local credits_tab = window:Tab({ Title = "Credits", Icon = "info" })
 
--- Only create SCP:RP tab for the creator
 local scp_tab = nil
 if isCreator then
 	scp_tab = window:Tab({ Title = "SCP:RP", Icon = "skull" })
@@ -129,6 +129,7 @@ local walkFlingEnabled = false
 local staffDetection = true
 local fovValue = 70
 local scpOutlineEnabled = false
+local instantProximity = false
 local configs = {}
 local ESP = {Highlights = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
 local SCPHighlights = {}
@@ -457,7 +458,6 @@ visual_tab:Toggle({
 	Callback = function(state) showDistance = state end
 })
 
--- ====================== SCP:RP SECTION (Creator Only) ======================
 if isCreator and scp_tab then
 	local function clearSCPHighlights()
 		for _, hl in pairs(SCPHighlights) do
@@ -488,7 +488,6 @@ if isCreator and scp_tab then
 		local scpsFolder = workspace:FindFirstChild("SCPs")
 		if not scpsFolder then return end
 
-		-- SCP-096
 		local scp096 = scpsFolder:FindFirstChild("SCP-096")
 		if scp096 then
 			local model096 = scp096:FindFirstChild("096")
@@ -497,7 +496,6 @@ if isCreator and scp_tab then
 			end
 		end
 
-		-- SCP-457
 		local scp457 = scpsFolder:FindFirstChild("SCP-457")
 		if scp457 then
 			applySCPOutline(scp457)
@@ -508,7 +506,6 @@ if isCreator and scp_tab then
 			end
 		end
 
-		-- SCP-173
 		local scp173 = scpsFolder:FindFirstChild("SCP-173")
 		if scp173 then
 			applySCPOutline(scp173)
@@ -535,9 +532,45 @@ if isCreator and scp_tab then
 		end
 	})
 
+	scp_tab:Toggle({
+		Title = "Instant Proximity",
+		Desc = "Instantly trigger nearby ProximityPrompts",
+		Type = "Checkbox",
+		Value = false,
+		Callback = function(state)
+			instantProximity = state
+		end
+	})
+
 	RunService.Heartbeat:Connect(function()
 		if scpOutlineEnabled then
 			updateSCPOutlines()
+		end
+
+		if instantProximity then
+			for _, prompt in ipairs(workspace:GetDescendants()) do
+				if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+					local parent = prompt.Parent
+					if parent and parent:IsA("BasePart") then
+						local char = LocalPlayer.Character
+						if char and char:FindFirstChild("HumanoidRootPart") then
+							local dist = (char.HumanoidRootPart.Position - parent.Position).Magnitude
+							if dist <= (prompt.MaxActivationDistance or 10) then
+								pcall(function()
+									if fireproximityprompt then
+										fireproximityprompt(prompt)
+									else
+										prompt.HoldDuration = 0
+										prompt:InputHoldBegin()
+										task.wait()
+										prompt:InputHoldEnd()
+									end
+								end)
+							end
+						end
+					end
+				end
+			end
 		end
 	end)
 end
