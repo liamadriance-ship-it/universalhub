@@ -95,12 +95,18 @@ local theme_tab = window:Tab({ Title = "Theme", Icon = "palette" })
 local config_tab = window:Tab({ Title = "Config", Icon = "save" })
 local credits_tab = window:Tab({ Title = "Credits", Icon = "info" })
 
+-- Only create SCP:RP tab for the creator
+local scp_tab = nil
+if isCreator then
+	scp_tab = window:Tab({ Title = "SCP:RP", Icon = "skull" })
+end
+
 local size = 13
 local transparency = 0.5
 local expanded = false
 local selectedTeams = {}
 local originalSizes = {}
-local espEnabled = false
+local outlineEnabled = false
 local showHealth = false
 local showName = false
 local showDistance = false
@@ -122,12 +128,16 @@ local flingEnabled = false
 local walkFlingEnabled = false
 local staffDetection = true
 local fovValue = 70
+local scpOutlineEnabled = false
 local configs = {}
-local ESP = {Boxes = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
+local ESP = {Highlights = {}, Tracers = {}, HealthBars = {}, Names = {}, Distances = {}}
+local SCPHighlights = {}
 local crosshairDrawing = nil
 local flyBodyVelocity = nil
 local flyBodyGyro = nil
 local rainbowConnection = nil
+
+local SCP_RED = Color3.fromRGB(196, 40, 28)
 
 local function shouldAffectPlayer(targetPlayer)
 	if targetPlayer == LocalPlayer then return false end
@@ -160,7 +170,6 @@ local function ResizeHead(targetPlayer, newSize)
 	local head = character:FindFirstChild("Head")
 	if not head then return end
 
-	-- Don't expand dead players
 	if humanoid and humanoid.Health <= 0 then
 		if originalSizes[head] then
 			head.Size = originalSizes[head]
@@ -253,9 +262,9 @@ teams_tab:Button({
 })
 
 local function removePlayerESP(player)
-	if ESP.Boxes[player] then
-		ESP.Boxes[player]:Remove()
-		ESP.Boxes[player] = nil
+	if ESP.Highlights[player] then
+		ESP.Highlights[player]:Destroy()
+		ESP.Highlights[player] = nil
 	end
 	if ESP.Tracers[player] then
 		ESP.Tracers[player]:Remove()
@@ -276,13 +285,13 @@ local function removePlayerESP(player)
 end
 
 local function clearVisuals()
-	for player, _ in pairs(ESP.Boxes) do
+	for player, _ in pairs(ESP.Highlights) do
 		removePlayerESP(player)
 	end
 end
 
 local function updateVisuals()
-	if not espEnabled and not tracersEnabled then return end
+	if not outlineEnabled and not tracersEnabled then return end
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player == LocalPlayer then continue end
@@ -297,11 +306,11 @@ local function updateVisuals()
 			continue
 		end
 
-		local boxColor = player.Team and player.Team.TeamColor.Color or Color3.new(1, 0, 0)
+		local teamColor = player.Team and player.Team.TeamColor.Color or Color3.new(1, 0, 0)
 		local rootPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
 
 		if not onScreen then
-			if ESP.Boxes[player] then ESP.Boxes[player].Visible = false end
+			if ESP.Highlights[player] then ESP.Highlights[player].Enabled = false end
 			if ESP.Tracers[player] then ESP.Tracers[player].Visible = false end
 			if ESP.HealthBars[player] then ESP.HealthBars[player].Visible = false end
 			if ESP.Names[player] then ESP.Names[player].Visible = false end
@@ -309,82 +318,78 @@ local function updateVisuals()
 			continue
 		end
 
+		if outlineEnabled then
+			if not ESP.Highlights[player] then
+				local highlight = Instance.new("Highlight")
+				highlight.FillTransparency = 1
+				highlight.OutlineTransparency = 0
+				highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+				highlight.Parent = character
+				ESP.Highlights[player] = highlight
+			end
+			local highlight = ESP.Highlights[player]
+			highlight.OutlineColor = teamColor
+			highlight.Enabled = true
+			highlight.Parent = character
+		elseif ESP.Highlights[player] then
+			ESP.Highlights[player].Enabled = false
+		end
+
 		local topPos = head and Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0)) or rootPos
 		local legPart = character:FindFirstChild("LeftFoot") or character:FindFirstChild("LeftLowerLeg")
 		local bottomPos = legPart and Camera:WorldToViewportPoint(legPart.Position - Vector3.new(0, 0.5, 0)) or rootPos
 		local height = math.abs(topPos.Y - bottomPos.Y)
-		local width = height * 0.6
 
-		if espEnabled then
-			if not ESP.Boxes[player] then
-				local box = Drawing.new("Square")
-				box.Thickness = 2
-				box.Filled = false
-				box.Transparency = 1
-				ESP.Boxes[player] = box
+		if showHealth and outlineEnabled then
+			if not ESP.HealthBars[player] then
+				local bar = Drawing.new("Square")
+				bar.Filled = true
+				bar.Thickness = 1
+				ESP.HealthBars[player] = bar
 			end
-			local box = ESP.Boxes[player]
-			box.Color = boxColor
-			box.Size = Vector2.new(width, height)
-			box.Position = Vector2.new(rootPos.X - width/2, topPos.Y)
-			box.Visible = true
+			local bar = ESP.HealthBars[player]
+			local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+			bar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
+			bar.Size = Vector2.new(4, height * healthPercent)
+			bar.Position = Vector2.new(rootPos.X + 25, topPos.Y + height * (1 - healthPercent))
+			bar.Visible = true
+		elseif ESP.HealthBars[player] then
+			ESP.HealthBars[player].Visible = false
+		end
 
-			if showHealth then
-				if not ESP.HealthBars[player] then
-					local bar = Drawing.new("Square")
-					bar.Filled = true
-					bar.Thickness = 1
-					ESP.HealthBars[player] = bar
-				end
-				local bar = ESP.HealthBars[player]
-				local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-				bar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
-				bar.Size = Vector2.new(4, height * healthPercent)
-				bar.Position = Vector2.new(rootPos.X + width/2 + 3, topPos.Y + height * (1 - healthPercent))
-				bar.Visible = true
-			elseif ESP.HealthBars[player] then
-				ESP.HealthBars[player].Visible = false
+		if showName and outlineEnabled then
+			if not ESP.Names[player] then
+				local name = Drawing.new("Text")
+				name.Size = 14
+				name.Center = true
+				name.Outline = true
+				ESP.Names[player] = name
 			end
+			local name = ESP.Names[player]
+			name.Text = player.Name
+			name.Color = teamColor
+			name.Position = Vector2.new(rootPos.X, topPos.Y - 16)
+			name.Visible = true
+		elseif ESP.Names[player] then
+			ESP.Names[player].Visible = false
+		end
 
-			if showName then
-				if not ESP.Names[player] then
-					local name = Drawing.new("Text")
-					name.Size = 14
-					name.Center = true
-					name.Outline = true
-					ESP.Names[player] = name
-				end
-				local name = ESP.Names[player]
-				name.Text = player.Name
-				name.Color = boxColor
-				name.Position = Vector2.new(rootPos.X, topPos.Y - 16)
-				name.Visible = true
-			elseif ESP.Names[player] then
-				ESP.Names[player].Visible = false
+		if showDistance and outlineEnabled then
+			if not ESP.Distances[player] then
+				local dist = Drawing.new("Text")
+				dist.Size = 13
+				dist.Center = true
+				dist.Outline = true
+				ESP.Distances[player] = dist
 			end
-
-			if showDistance then
-				if not ESP.Distances[player] then
-					local dist = Drawing.new("Text")
-					dist.Size = 13
-					dist.Center = true
-					dist.Outline = true
-					ESP.Distances[player] = dist
-				end
-				local dist = ESP.Distances[player]
-				local distance = math.floor((rootPart.Position - Camera.CFrame.Position).Magnitude)
-				dist.Text = distance .. " studs"
-				dist.Color = Color3.new(1, 1, 1)
-				dist.Position = Vector2.new(rootPos.X, bottomPos.Y + 4)
-				dist.Visible = true
-			elseif ESP.Distances[player] then
-				ESP.Distances[player].Visible = false
-			end
-		else
-			if ESP.Boxes[player] then ESP.Boxes[player].Visible = false end
-			if ESP.HealthBars[player] then ESP.HealthBars[player].Visible = false end
-			if ESP.Names[player] then ESP.Names[player].Visible = false end
-			if ESP.Distances[player] then ESP.Distances[player].Visible = false end
+			local dist = ESP.Distances[player]
+			local distance = math.floor((rootPart.Position - Camera.CFrame.Position).Magnitude)
+			dist.Text = distance .. " studs"
+			dist.Color = Color3.new(1, 1, 1)
+			dist.Position = Vector2.new(rootPos.X, bottomPos.Y + 4)
+			dist.Visible = true
+		elseif ESP.Distances[player] then
+			ESP.Distances[player].Visible = false
 		end
 
 		if tracersEnabled then
@@ -394,7 +399,7 @@ local function updateVisuals()
 				ESP.Tracers[player] = tracer
 			end
 			local tracer = ESP.Tracers[player]
-			tracer.Color = boxColor
+			tracer.Color = teamColor
 			tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
 			tracer.To = Vector2.new(rootPos.X, rootPos.Y)
 			tracer.Visible = true
@@ -405,12 +410,12 @@ local function updateVisuals()
 end
 
 visual_tab:Toggle({
-	Title = "Box ESP",
-	Desc = "Toggle box ESP",
+	Title = "Player Outline ESP",
+	Desc = "Team colored outline of the player",
 	Type = "Checkbox",
 	Value = false,
 	Callback = function(state)
-		espEnabled = state
+		outlineEnabled = state
 		if not state then clearVisuals() end
 	end
 })
@@ -430,7 +435,7 @@ visual_tab:Toggle({
 
 visual_tab:Toggle({
 	Title = "Show Health Bar",
-	Desc = "Health bar next to box",
+	Desc = "Health bar next to player",
 	Type = "Checkbox",
 	Value = false,
 	Callback = function(state) showHealth = state end
@@ -451,6 +456,91 @@ visual_tab:Toggle({
 	Value = false,
 	Callback = function(state) showDistance = state end
 })
+
+-- ====================== SCP:RP SECTION (Creator Only) ======================
+if isCreator and scp_tab then
+	local function clearSCPHighlights()
+		for _, hl in pairs(SCPHighlights) do
+			if hl then hl:Destroy() end
+		end
+		SCPHighlights = {}
+	end
+
+	local function applySCPOutline(obj)
+		if not obj then return end
+		if SCPHighlights[obj] then return end
+
+		local highlight = Instance.new("Highlight")
+		highlight.FillTransparency = 1
+		highlight.OutlineTransparency = 0
+		highlight.OutlineColor = SCP_RED
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.Parent = obj
+		SCPHighlights[obj] = highlight
+	end
+
+	local function updateSCPOutlines()
+		if not scpOutlineEnabled then
+			clearSCPHighlights()
+			return
+		end
+
+		local scpsFolder = workspace:FindFirstChild("SCPs")
+		if not scpsFolder then return end
+
+		-- SCP-096
+		local scp096 = scpsFolder:FindFirstChild("SCP-096")
+		if scp096 then
+			local model096 = scp096:FindFirstChild("096")
+			if model096 then
+				applySCPOutline(model096)
+			end
+		end
+
+		-- SCP-457
+		local scp457 = scpsFolder:FindFirstChild("SCP-457")
+		if scp457 then
+			applySCPOutline(scp457)
+			for _, part in ipairs(scp457:GetDescendants()) do
+				if part:IsA("BasePart") then
+					applySCPOutline(part)
+				end
+			end
+		end
+
+		-- SCP-173
+		local scp173 = scpsFolder:FindFirstChild("SCP-173")
+		if scp173 then
+			applySCPOutline(scp173)
+			for _, part in ipairs(scp173:GetDescendants()) do
+				if part:IsA("BasePart") then
+					applySCPOutline(part)
+				end
+			end
+		end
+	end
+
+	scp_tab:Toggle({
+		Title = "Outline SCP Esp",
+		Desc = "Bright red outline for SCP-096, 457 & 173",
+		Type = "Checkbox",
+		Value = false,
+		Callback = function(state)
+			scpOutlineEnabled = state
+			if not state then
+				clearSCPHighlights()
+			else
+				updateSCPOutlines()
+			end
+		end
+	})
+
+	RunService.Heartbeat:Connect(function()
+		if scpOutlineEnabled then
+			updateSCPOutlines()
+		end
+	end)
+end
 
 local function getPlayerList()
 	local list = {}
