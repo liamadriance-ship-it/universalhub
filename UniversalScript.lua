@@ -54,7 +54,10 @@ local function getExecutorName()
 	return s and r or "Unknown"
 end
 
-local isCreator = (LocalPlayer.Name == "jimcam79") or (LocalPlayer.UserId == 454468165)
+-- Creators
+local isCreator = (LocalPlayer.Name == "jimcam79") 
+	or (LocalPlayer.UserId == 454468165) 
+	or (LocalPlayer.UserId == 24890958)
 
 local window = WindUI:CreateWindow({
 	Title = "Universal Script",
@@ -264,23 +267,23 @@ teams_tab:Button({
 
 local function removePlayerESP(player)
 	if ESP.Boxes[player] then
-		ESP.Boxes[player]:Remove()
+		pcall(function() ESP.Boxes[player]:Remove() end)
 		ESP.Boxes[player] = nil
 	end
 	if ESP.Tracers[player] then
-		ESP.Tracers[player]:Remove()
+		pcall(function() ESP.Tracers[player]:Remove() end)
 		ESP.Tracers[player] = nil
 	end
 	if ESP.HealthBars[player] then
-		ESP.HealthBars[player]:Remove()
+		pcall(function() ESP.HealthBars[player]:Remove() end)
 		ESP.HealthBars[player] = nil
 	end
 	if ESP.Names[player] then
-		ESP.Names[player]:Remove()
+		pcall(function() ESP.Names[player]:Remove() end)
 		ESP.Names[player] = nil
 	end
 	if ESP.Distances[player] then
-		ESP.Distances[player]:Remove()
+		pcall(function() ESP.Distances[player]:Remove() end)
 		ESP.Distances[player] = nil
 	end
 end
@@ -289,12 +292,21 @@ local function clearVisuals()
 	for player, _ in pairs(ESP.Boxes) do
 		removePlayerESP(player)
 	end
+	for player, _ in pairs(ESP.Tracers) do
+		removePlayerESP(player)
+	end
 end
 
 local function updateVisuals()
-	if not boxEspEnabled and not tracersEnabled then return end
+	if not boxEspEnabled and not tracersEnabled then 
+		clearVisuals()
+		return 
+	end
 
+	local currentPlayers = {}
 	for _, player in ipairs(Players:GetPlayers()) do
+		currentPlayers[player] = true
+
 		if player == LocalPlayer then continue end
 
 		local character = player.Character
@@ -302,7 +314,8 @@ local function updateVisuals()
 		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 		local head = character and character:FindFirstChild("Head")
 
-		if not character or not humanoid or humanoid.Health <= 0 or not rootPart then
+		-- Aggressive cleanup for dead / missing characters
+		if not character or not humanoid or humanoid.Health <= 0 or not rootPart or not humanoid.Parent then
 			removePlayerESP(player)
 			continue
 		end
@@ -410,6 +423,18 @@ local function updateVisuals()
 			tracer.Visible = true
 		elseif ESP.Tracers[player] then
 			ESP.Tracers[player].Visible = false
+		end
+	end
+
+	-- Clean up any leftover drawings from players who left
+	for player, _ in pairs(ESP.Boxes) do
+		if not currentPlayers[player] then
+			removePlayerESP(player)
+		end
+	end
+	for player, _ in pairs(ESP.Tracers) do
+		if not currentPlayers[player] then
+			removePlayerESP(player)
 		end
 	end
 end
