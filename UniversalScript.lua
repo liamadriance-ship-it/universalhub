@@ -106,9 +106,11 @@ end
 local size = 13
 local transparency = 0.5
 local expanded = false
-local torsoSize = 13
-local torsoTransparency = 0.5
-local torsoExpanded = false
+
+local hrpSize = 13
+local hrpTransparency = 0.5
+local hrpExpanded = false
+
 local selectedTeams = {}
 local originalSizes = {}
 local boxEspEnabled = false
@@ -200,7 +202,7 @@ local function ResizeHead(targetPlayer, newSize)
 	end
 end
 
-local function ResizeTorso(targetPlayer, newSize)
+local function ResizeHRP(targetPlayer, newSize)
 	if not shouldAffectPlayer(targetPlayer) then
 		local character = targetPlayer.Character
 		if character then
@@ -208,7 +210,7 @@ local function ResizeTorso(targetPlayer, newSize)
 			if hrp and originalSizes[hrp] then
 				hrp.Size = originalSizes[hrp]
 				hrp.Transparency = 1
-				hrp.CanCollide = true
+				hrp.CanCollide = false
 			end
 		end
 		return
@@ -225,7 +227,7 @@ local function ResizeTorso(targetPlayer, newSize)
 		if originalSizes[hrp] then
 			hrp.Size = originalSizes[hrp]
 			hrp.Transparency = 1
-			hrp.CanCollide = true
+			hrp.CanCollide = false
 		end
 		return
 	end
@@ -237,11 +239,12 @@ local function ResizeTorso(targetPlayer, newSize)
 	if newSize <= 0 then
 		hrp.Size = originalSizes[hrp]
 		hrp.Transparency = 1
-		hrp.CanCollide = true
+		hrp.CanCollide = false
 	else
+		-- Exact same style as Head expander
 		hrp.Size = Vector3.new(newSize, newSize, newSize)
-		hrp.Transparency = torsoTransparency
-		hrp.CanCollide = false   -- prevents floating
+		hrp.Transparency = hrpTransparency
+		hrp.CanCollide = false
 		hrp.Massless = true
 		hrp.Anchored = false
 	end
@@ -281,15 +284,15 @@ hitbox_tab:Slider({
 
 hitbox_tab:Toggle({
 	Title = "Enable HumanoidRootPart Expander",
-	Desc = "Expands HumanoidRootPart only (for body shots)",
+	Desc = "Same as head expander but for HumanoidRootPart (body shots)",
 	Type = "Checkbox",
 	Icon = "check",
 	Value = false,
 	Callback = function(state)
-		torsoExpanded = state
+		hrpExpanded = state
 		if not state then
 			for _, plr in Players:GetPlayers() do
-				ResizeTorso(plr, 0)
+				ResizeHRP(plr, 0)
 			end
 		end
 	end
@@ -300,7 +303,7 @@ hitbox_tab:Slider({
 	Desc = "Higher = bigger body hitbox",
 	Step = 1,
 	Value = { Min = 5, Max = 25, Default = 13 },
-	Callback = function(value) torsoSize = value end
+	Callback = function(value) hrpSize = value end
 })
 
 hitbox_tab:Slider({
@@ -308,7 +311,7 @@ hitbox_tab:Slider({
 	Desc = "Visibility of expanded HumanoidRootPart",
 	Step = 0.1,
 	Value = { Min = 0.3, Max = 1, Default = 0.5 },
-	Callback = function(value) torsoTransparency = value end
+	Callback = function(value) hrpTransparency = value end
 })
 
 local allTeams = {}
@@ -332,12 +335,12 @@ teams_tab:Dropdown({
 				end
 			end
 		end
-		if torsoExpanded then
+		if hrpExpanded then
 			for _, plr in Players:GetPlayers() do
 				if shouldAffectPlayer(plr) then
-					ResizeTorso(plr, torsoSize)
+					ResizeHRP(plr, hrpSize)
 				else
-					ResizeTorso(plr, 0)
+					ResizeHRP(plr, 0)
 				end
 			end
 		end
@@ -1216,8 +1219,8 @@ config_tab:Button({
 		local data = {
 			size = size,
 			transparency = transparency,
-			torsoSize = torsoSize,
-			torsoTransparency = torsoTransparency,
+			hrpSize = hrpSize,
+			hrpTransparency = hrpTransparency,
 			walkSpeed = walkSpeed,
 			showHealth = showHealth,
 			showName = showName,
@@ -1244,8 +1247,8 @@ config_tab:Dropdown({
 			local c = configs[name]
 			size = c.size or 13
 			transparency = c.transparency or 0.5
-			torsoSize = c.torsoSize or 13
-			torsoTransparency = c.torsoTransparency or 0.5
+			hrpSize = c.hrpSize or 13
+			hrpTransparency = c.hrpTransparency or 0.5
 			walkSpeed = c.walkSpeed or 16
 			showHealth = c.showHealth or false
 			showName = c.showName or false
@@ -1300,9 +1303,9 @@ RunService.Heartbeat:Connect(function()
 			ResizeHead(player, size)
 		end
 	end
-	if torsoExpanded then
+	if hrpExpanded then
 		for _, player in Players:GetPlayers() do
-			ResizeTorso(player, torsoSize)
+			ResizeHRP(player, hrpSize)
 		end
 	end
 end)
@@ -1314,7 +1317,7 @@ Players.PlayerAdded:Connect(function(newPlayer)
 	newPlayer.CharacterAdded:Connect(function()
 		task.wait(0.6)
 		if expanded then ResizeHead(newPlayer, size) end
-		if torsoExpanded then ResizeTorso(newPlayer, torsoSize) end
+		if hrpExpanded then ResizeHRP(newPlayer, hrpSize) end
 	end)
 	newPlayer.CharacterRemoving:Connect(function()
 		removePlayerESP(newPlayer)
@@ -1326,7 +1329,7 @@ for _, plr in Players:GetPlayers() do
 		plr.CharacterAdded:Connect(function()
 			task.wait(0.6)
 			if expanded then ResizeHead(plr, size) end
-			if torsoExpanded then ResizeTorso(plr, torsoSize) end
+			if hrpExpanded then ResizeHRP(plr, hrpSize) end
 		end)
 		plr.CharacterRemoving:Connect(function()
 			removePlayerESP(plr)
