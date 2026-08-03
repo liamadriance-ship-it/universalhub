@@ -113,7 +113,6 @@ local hrpExpanded = false
 
 local selectedTeams = {}
 local originalSizes = {}
-local hrpHitboxes = {} -- stores the fake hitbox parts
 local boxEspEnabled = false
 local showHealth = false
 local showName = false
@@ -203,18 +202,17 @@ local function ResizeHead(targetPlayer, newSize)
 	end
 end
 
-local function clearHRPHitbox(player)
-	if hrpHitboxes[player] then
-		pcall(function()
-			hrpHitboxes[player]:Destroy()
-		end)
-		hrpHitboxes[player] = nil
-	end
-end
-
 local function ResizeHRP(targetPlayer, newSize)
-	if not shouldAffectPlayer(targetPlayer) or newSize <= 0 then
-		clearHRPHitbox(targetPlayer)
+	if not shouldAffectPlayer(targetPlayer) then
+		local character = targetPlayer.Character
+		if character then
+			local hrp = character:FindFirstChild("HumanoidRootPart")
+			if hrp and originalSizes[hrp] then
+				hrp.Size = originalSizes[hrp]
+				hrp.Transparency = 1
+				hrp.CanCollide = false
+			end
+		end
 		return
 	end
 
@@ -223,37 +221,36 @@ local function ResizeHRP(targetPlayer, newSize)
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if not hrp or (humanoid and humanoid.Health <= 0) then
-		clearHRPHitbox(targetPlayer)
+	if not hrp then return end
+
+	if humanoid and humanoid.Health <= 0 then
+		if originalSizes[hrp] then
+			hrp.Size = originalSizes[hrp]
+			hrp.Transparency = 1
+			hrp.CanCollide = false
+		end
 		return
 	end
 
-	-- Create or update the fake hitbox part (this does NOT freeze the player)
-	local hitbox = hrpHitboxes[targetPlayer]
-	if not hitbox or not hitbox.Parent then
-		hitbox = Instance.new("Part")
-		hitbox.Name = "HRP_Hitbox"
-		hitbox.Anchored = false
-		hitbox.CanCollide = false
-		hitbox.Massless = true
-		hitbox.Transparency = hrpTransparency
-		hitbox.Material = Enum.Material.Neon
-		hitbox.Color = Color3.fromRGB(255, 100, 100)
-		hitbox.Parent = character
-
-		local weld = Instance.new("Weld")
-		weld.Part0 = hrp
-		weld.Part1 = hitbox
-		weld.C0 = CFrame.new()
-		weld.Parent = hitbox
-
-		hrpHitboxes[targetPlayer] = hitbox
+	if not originalSizes[hrp] then
+		originalSizes[hrp] = hrp.Size
 	end
 
-	hitbox.Size = Vector3.new(newSize, newSize, newSize)
-	hitbox.Transparency = hrpTransparency
-	hitbox.CanCollide = false
-	hitbox.Massless = true
+	if newSize <= 0 then
+		hrp.Size = originalSizes[hrp]
+		hrp.Transparency = 1
+		hrp.CanCollide = false
+	else
+		-- Only change size if it's different (reduces freeze a lot)
+		local targetSize = Vector3.new(newSize, newSize, newSize)
+		if hrp.Size ~= targetSize then
+			hrp.Size = targetSize
+		end
+		hrp.Transparency = hrpTransparency
+		hrp.CanCollide = false
+		hrp.Massless = true
+		hrp.Anchored = false
+	end
 end
 
 hitbox_tab:Toggle({
@@ -290,7 +287,7 @@ hitbox_tab:Slider({
 
 hitbox_tab:Toggle({
 	Title = "Enable HumanoidRootPart Expander",
-	Desc = "Big body hitbox (no freeze)",
+	Desc = "Real HumanoidRootPart expand (does damage)",
 	Type = "Checkbox",
 	Icon = "check",
 	Value = false,
@@ -298,7 +295,7 @@ hitbox_tab:Toggle({
 		hrpExpanded = state
 		if not state then
 			for _, plr in Players:GetPlayers() do
-				clearHRPHitbox(plr)
+				ResizeHRP(plr, 0)
 			end
 		end
 	end
@@ -314,7 +311,7 @@ hitbox_tab:Slider({
 
 hitbox_tab:Slider({
 	Title = "HumanoidRootPart Transparency",
-	Desc = "Visibility of the body hitbox",
+	Desc = "Visibility of expanded HumanoidRootPart",
 	Step = 0.1,
 	Value = { Min = 0.3, Max = 1, Default = 0.5 },
 	Callback = function(value) hrpTransparency = value end
@@ -346,7 +343,7 @@ teams_tab:Dropdown({
 				if shouldAffectPlayer(plr) then
 					ResizeHRP(plr, hrpSize)
 				else
-					clearHRPHitbox(plr)
+					ResizeHRP(plr, 0)
 				end
 			end
 		end
@@ -766,7 +763,6 @@ end)
 
 Players.PlayerRemoving:Connect(function(player)
 	removePlayerESP(player)
-	clearHRPHitbox(player)
 	pcall(function()
 		spectateDropdown:SetValues(getPlayerList())
 	end)
@@ -1304,13 +1300,18 @@ credits_tab:Paragraph({
 	Desc = "Credits to Team Void"
 })
 
+-- Only update every few frames to reduce freeze
+local hrpUpdateCounter = 0
 RunService.Heartbeat:Connect(function()
 	if expanded then
 		for _, player in Players:GetPlayers() do
 			ResizeHead(player, size)
 		end
 	end
-	if hrpExpanded then
+
+	hrpUpdateCounter = hrpUpdateCounter + 1
+	if hrpExpanded and hrpUpdateCounter >= 3 then -- update less often
+		hrpUpdateCounter = 0
 		for _, player in Players:GetPlayers() do
 			ResizeHRP(player, hrpSize)
 		end
@@ -1328,7 +1329,6 @@ Players.PlayerAdded:Connect(function(newPlayer)
 	end)
 	newPlayer.CharacterRemoving:Connect(function()
 		removePlayerESP(newPlayer)
-		clearHRPHitbox(newPlayer)
 	end)
 end)
 
@@ -1341,7 +1341,6 @@ for _, plr in Players:GetPlayers() do
 		end)
 		plr.CharacterRemoving:Connect(function()
 			removePlayerESP(plr)
-			clearHRPHitbox(plr)
 		end)
 	end
 end
