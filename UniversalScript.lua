@@ -103,16 +103,12 @@ if isCreator then
 	scp_tab = window:Tab({ Title = "SCP:RP", Icon = "skull" })
 end
 
-local size = 13
-local transparency = 0.5
-local expanded = false
-
-local torsoSize = 13
-local torsoTransparency = 0.5
-local torsoExpanded = false
-
+-- Hitbox settings (from the script you sent)
+local hitboxSize = 10
+local hitboxEnabled = false
 local selectedTeams = {}
-local originalSizes = {}
+local playerList = {}
+
 local boxEspEnabled = false
 local showHealth = false
 local showName = false
@@ -158,163 +154,58 @@ local function shouldAffectPlayer(targetPlayer)
 	return false
 end
 
-local function ResizeHead(targetPlayer, newSize)
-	if not shouldAffectPlayer(targetPlayer) then
-		local character = targetPlayer.Character
-		if character then
-			local head = character:FindFirstChild("Head")
-			if head and originalSizes[head] then
-				head.Size = originalSizes[head]
-				head.Transparency = 1
-			end
+local function refreshPlayerList()
+	playerList = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			table.insert(playerList, player)
 		end
-		return
 	end
+end
 
-	local character = targetPlayer.Character
-	if not character then return end
+local function applyHitbox(player, enabled)
+	if not player.Character then return end
+	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
 
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local head = character:FindFirstChild("Head")
-	if not head then return end
-
-	if humanoid and humanoid.Health <= 0 then
-		if originalSizes[head] then
-			head.Size = originalSizes[head]
-			head.Transparency = 1
-		end
-		return
-	end
-
-	if not originalSizes[head] then
-		originalSizes[head] = head.Size
-	end
-
-	if newSize <= 0 then
-		head.Size = originalSizes[head]
-		head.Transparency = 1
+	if enabled and shouldAffectPlayer(player) then
+		hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+		hrp.Transparency = 0.7
+		hrp.BrickColor = BrickColor.new("Really blue")
+		hrp.Material = Enum.Material.Neon
+		hrp.CanCollide = false
 	else
-		head.Size = Vector3.new(newSize, newSize, newSize)
-		head.Transparency = transparency
-		head.CanCollide = false
-		head.Massless = true
-		head.Anchored = false
-	end
-end
-
-local function ResizeTorso(targetPlayer, newSize)
-	if not shouldAffectPlayer(targetPlayer) then
-		local character = targetPlayer.Character
-		if character then
-			for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
-				local part = character:FindFirstChild(name)
-				if part and originalSizes[part] then
-					part.Size = originalSizes[part]
-					part.Transparency = 1
-				end
-			end
-		end
-		return
-	end
-
-	local character = targetPlayer.Character
-	if not character then return end
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid and humanoid.Health <= 0 then
-		for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
-			local part = character:FindFirstChild(name)
-			if part and originalSizes[part] then
-				part.Size = originalSizes[part]
-				part.Transparency = 1
-			end
-		end
-		return
-	end
-
-	for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
-		local part = character:FindFirstChild(name)
-		if part then
-			if not originalSizes[part] then
-				originalSizes[part] = part.Size
-			end
-
-			if newSize <= 0 then
-				part.Size = originalSizes[part]
-				part.Transparency = 1
-			else
-				part.Size = Vector3.new(newSize, newSize, newSize)
-				part.Transparency = torsoTransparency
-				part.CanCollide = false
-				part.Massless = true
-				part.Anchored = false
-			end
-		end
+		hrp.Size = Vector3.new(2, 2, 1)
+		hrp.Transparency = 0
+		hrp.BrickColor = BrickColor.new("Medium stone grey")
+		hrp.Material = Enum.Material.Plastic
+		hrp.CanCollide = true
 	end
 end
 
 hitbox_tab:Toggle({
-	Title = "Enable Head Expander",
-	Desc = "Turn head expander on/off",
+	Title = "Enable Hitbox",
+	Desc = "Expand HumanoidRootPart (blue neon)",
 	Type = "Checkbox",
 	Icon = "check",
 	Value = false,
 	Callback = function(state)
-		expanded = state
-		if not state then
-			for _, plr in Players:GetPlayers() do
-				ResizeHead(plr, 0)
-			end
+		hitboxEnabled = state
+		refreshPlayerList()
+		for _, player in ipairs(playerList) do
+			applyHitbox(player, state)
 		end
 	end
 })
 
 hitbox_tab:Slider({
-	Title = "Head Size",
-	Desc = "Higher = bigger head hitbox",
+	Title = "Hitbox Size",
+	Desc = "Size of the expanded HumanoidRootPart",
 	Step = 1,
-	Value = { Min = 5, Max = 25, Default = 13 },
-	Callback = function(value) size = value end
-})
-
-hitbox_tab:Slider({
-	Title = "Head Transparency",
-	Desc = "Visibility of expanded heads",
-	Step = 0.1,
-	Value = { Min = 0.3, Max = 1, Default = 0.5 },
-	Callback = function(value) transparency = value end
-})
-
-hitbox_tab:Toggle({
-	Title = "Enable Torso Expander",
-	Desc = "Expands UpperTorso / LowerTorso / Torso (body shots)",
-	Type = "Checkbox",
-	Icon = "check",
-	Value = false,
-	Callback = function(state)
-		torsoExpanded = state
-		if not state then
-			for _, plr in Players:GetPlayers() do
-				ResizeTorso(plr, 0)
-			end
-		end
+	Value = { Min = 5, Max = 30, Default = 10 },
+	Callback = function(value)
+		hitboxSize = value
 	end
-})
-
-hitbox_tab:Slider({
-	Title = "Torso Size",
-	Desc = "Higher = bigger body hitbox",
-	Step = 1,
-	Value = { Min = 5, Max = 25, Default = 13 },
-	Callback = function(value) torsoSize = value end
-})
-
-hitbox_tab:Slider({
-	Title = "Torso Transparency",
-	Desc = "Visibility of expanded torso",
-	Step = 0.1,
-	Value = { Min = 0.3, Max = 1, Default = 0.5 },
-	Callback = function(value) torsoTransparency = value end
 })
 
 local allTeams = {}
@@ -329,21 +220,11 @@ teams_tab:Dropdown({
 	Multi = true,
 	Callback = function(selected)
 		selectedTeams = selected or {}
-		if expanded then
-			for _, plr in Players:GetPlayers() do
-				if shouldAffectPlayer(plr) then
-					ResizeHead(plr, size)
-				else
-					ResizeHead(plr, 0)
-				end
-			end
-		end
-		if torsoExpanded then
-			for _, plr in Players:GetPlayers() do
-				if shouldAffectPlayer(plr) then
-					ResizeTorso(plr, torsoSize)
-				else
-					ResizeTorso(plr, 0)
+		if hitboxEnabled then
+			refreshPlayerList()
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer then
+					applyHitbox(player, shouldAffectPlayer(player))
 				end
 			end
 		end
@@ -1220,10 +1101,7 @@ config_tab:Button({
 			return
 		end
 		local data = {
-			size = size,
-			transparency = transparency,
-			torsoSize = torsoSize,
-			torsoTransparency = torsoTransparency,
+			hitboxSize = hitboxSize,
 			walkSpeed = walkSpeed,
 			showHealth = showHealth,
 			showName = showName,
@@ -1248,10 +1126,7 @@ config_tab:Dropdown({
 	Callback = function(name)
 		if configs[name] then
 			local c = configs[name]
-			size = c.size or 13
-			transparency = c.transparency or 0.5
-			torsoSize = c.torsoSize or 13
-			torsoTransparency = c.torsoTransparency or 0.5
+			hitboxSize = c.hitboxSize or 10
 			walkSpeed = c.walkSpeed or 16
 			showHealth = c.showHealth or false
 			showName = c.showName or false
@@ -1300,16 +1175,28 @@ credits_tab:Paragraph({
 	Desc = "Credits to Team Void"
 })
 
-RunService.Heartbeat:Connect(function()
-	if expanded then
-		for _, player in Players:GetPlayers() do
-			ResizeHead(player, size)
+-- Continuous hitbox update (same as the script you sent)
+RunService.RenderStepped:Connect(function()
+	if hitboxEnabled then
+		refreshPlayerList()
+		for _, player in ipairs(playerList) do
+			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and shouldAffectPlayer(player) then
+				local hrp = player.Character.HumanoidRootPart
+				hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+				hrp.Transparency = 0.7
+				hrp.BrickColor = BrickColor.new("Really blue")
+				hrp.Material = Enum.Material.Neon
+				hrp.CanCollide = false
+			end
 		end
 	end
-	if torsoExpanded then
-		for _, player in Players:GetPlayers() do
-			ResizeTorso(player, torsoSize)
-		end
+end)
+
+-- Refresh player list every second
+task.spawn(function()
+	while true do
+		refreshPlayerList()
+		task.wait(1)
 	end
 end)
 
@@ -1318,9 +1205,10 @@ RunService.RenderStepped:Connect(updateVisuals)
 Players.PlayerAdded:Connect(function(newPlayer)
 	if newPlayer == LocalPlayer then return end
 	newPlayer.CharacterAdded:Connect(function()
-		task.wait(0.6)
-		if expanded then ResizeHead(newPlayer, size) end
-		if torsoExpanded then ResizeTorso(newPlayer, torsoSize) end
+		task.wait(0.5)
+		if hitboxEnabled and shouldAffectPlayer(newPlayer) then
+			applyHitbox(newPlayer, true)
+		end
 	end)
 	newPlayer.CharacterRemoving:Connect(function()
 		removePlayerESP(newPlayer)
@@ -1330,9 +1218,10 @@ end)
 for _, plr in Players:GetPlayers() do
 	if plr ~= LocalPlayer then
 		plr.CharacterAdded:Connect(function()
-			task.wait(0.6)
-			if expanded then ResizeHead(plr, size) end
-			if torsoExpanded then ResizeTorso(plr, torsoSize) end
+			task.wait(0.5)
+			if hitboxEnabled and shouldAffectPlayer(plr) then
+				applyHitbox(plr, true)
+			end
 		end)
 		plr.CharacterRemoving:Connect(function()
 			removePlayerESP(plr)
