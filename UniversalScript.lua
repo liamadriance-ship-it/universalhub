@@ -204,12 +204,11 @@ local function ResizeTorso(targetPlayer, newSize)
 	if not shouldAffectPlayer(targetPlayer) then
 		local character = targetPlayer.Character
 		if character then
-			for _, name in ipairs({"HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
-				local part = character:FindFirstChild(name)
-				if part and originalSizes[part] then
-					part.Size = originalSizes[part]
-					part.Transparency = 1
-				end
+			local hrp = character:FindFirstChild("HumanoidRootPart")
+			if hrp and originalSizes[hrp] then
+				hrp.Size = originalSizes[hrp]
+				hrp.Transparency = 1
+				hrp.CanCollide = true
 			end
 		end
 		return
@@ -219,53 +218,32 @@ local function ResizeTorso(targetPlayer, newSize)
 	if not character then return end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
 	if humanoid and humanoid.Health <= 0 then
-		for _, name in ipairs({"HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
-			local part = character:FindFirstChild(name)
-			if part and originalSizes[part] then
-				part.Size = originalSizes[part]
-				part.Transparency = 1
-			end
+		if originalSizes[hrp] then
+			hrp.Size = originalSizes[hrp]
+			hrp.Transparency = 1
+			hrp.CanCollide = true
 		end
 		return
 	end
 
-	-- Expand HumanoidRootPart first (most important for body shots)
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		if not originalSizes[hrp] then
-			originalSizes[hrp] = hrp.Size
-		end
-		if newSize <= 0 then
-			hrp.Size = originalSizes[hrp]
-			hrp.Transparency = 1
-		else
-			hrp.Size = Vector3.new(newSize, newSize, newSize)
-			hrp.Transparency = torsoTransparency
-			hrp.CanCollide = false
-			hrp.Massless = true
-			hrp.Anchored = false
-		end
+	if not originalSizes[hrp] then
+		originalSizes[hrp] = hrp.Size
 	end
 
-	-- Also expand torso parts for better coverage
-	for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
-		local part = character:FindFirstChild(name)
-		if part then
-			if not originalSizes[part] then
-				originalSizes[part] = part.Size
-			end
-			if newSize <= 0 then
-				part.Size = originalSizes[part]
-				part.Transparency = 1
-			else
-				part.Size = Vector3.new(newSize, newSize, newSize)
-				part.Transparency = torsoTransparency
-				part.CanCollide = false
-				part.Massless = true
-				part.Anchored = false
-			end
-		end
+	if newSize <= 0 then
+		hrp.Size = originalSizes[hrp]
+		hrp.Transparency = 1
+		hrp.CanCollide = true
+	else
+		hrp.Size = Vector3.new(newSize, newSize, newSize)
+		hrp.Transparency = torsoTransparency
+		hrp.CanCollide = false   -- prevents floating
+		hrp.Massless = true
+		hrp.Anchored = false
 	end
 end
 
@@ -302,8 +280,8 @@ hitbox_tab:Slider({
 })
 
 hitbox_tab:Toggle({
-	Title = "Enable Torso / Body Expander",
-	Desc = "Expands HumanoidRootPart + Torso (for body shots)",
+	Title = "Enable HumanoidRootPart Expander",
+	Desc = "Expands HumanoidRootPart only (for body shots)",
 	Type = "Checkbox",
 	Icon = "check",
 	Value = false,
@@ -318,7 +296,7 @@ hitbox_tab:Toggle({
 })
 
 hitbox_tab:Slider({
-	Title = "Torso / Body Size",
+	Title = "HumanoidRootPart Size",
 	Desc = "Higher = bigger body hitbox",
 	Step = 1,
 	Value = { Min = 5, Max = 25, Default = 13 },
@@ -326,8 +304,8 @@ hitbox_tab:Slider({
 })
 
 hitbox_tab:Slider({
-	Title = "Torso Transparency",
-	Desc = "Visibility of expanded body",
+	Title = "HumanoidRootPart Transparency",
+	Desc = "Visibility of expanded HumanoidRootPart",
 	Step = 0.1,
 	Value = { Min = 0.3, Max = 1, Default = 0.5 },
 	Callback = function(value) torsoTransparency = value end
