@@ -54,7 +54,6 @@ local function getExecutorName()
 	return s and r or "Unknown"
 end
 
--- Creators
 local isCreator = (LocalPlayer.Name == "jimcam79") 
 	or (LocalPlayer.UserId == 454468165) 
 	or (LocalPlayer.UserId == 24890958)
@@ -107,6 +106,9 @@ end
 local size = 13
 local transparency = 0.5
 local expanded = false
+local torsoSize = 13
+local torsoTransparency = 0.5
+local torsoExpanded = false
 local selectedTeams = {}
 local originalSizes = {}
 local boxEspEnabled = false
@@ -198,9 +200,60 @@ local function ResizeHead(targetPlayer, newSize)
 	end
 end
 
+local function ResizeTorso(targetPlayer, newSize)
+	if not shouldAffectPlayer(targetPlayer) then
+		local character = targetPlayer.Character
+		if character then
+			for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
+				local part = character:FindFirstChild(name)
+				if part and originalSizes[part] then
+					part.Size = originalSizes[part]
+					part.Transparency = 1
+				end
+			end
+		end
+		return
+	end
+
+	local character = targetPlayer.Character
+	if not character then return end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.Health <= 0 then
+		for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
+			local part = character:FindFirstChild(name)
+			if part and originalSizes[part] then
+				part.Size = originalSizes[part]
+				part.Transparency = 1
+			end
+		end
+		return
+	end
+
+	for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
+		local part = character:FindFirstChild(name)
+		if part then
+			if not originalSizes[part] then
+				originalSizes[part] = part.Size
+			end
+
+			if newSize <= 0 then
+				part.Size = originalSizes[part]
+				part.Transparency = 1
+			else
+				part.Size = Vector3.new(newSize, newSize, newSize)
+				part.Transparency = torsoTransparency
+				part.CanCollide = false
+				part.Massless = true
+				part.Anchored = false
+			end
+		end
+	end
+end
+
 hitbox_tab:Toggle({
 	Title = "Enable Head Expander",
-	Desc = "Turn expander on/off",
+	Desc = "Turn head expander on/off",
 	Type = "Checkbox",
 	Icon = "check",
 	Value = false,
@@ -216,7 +269,7 @@ hitbox_tab:Toggle({
 
 hitbox_tab:Slider({
 	Title = "Head Size",
-	Desc = "Higher = bigger hitbox",
+	Desc = "Higher = bigger head hitbox",
 	Step = 1,
 	Value = { Min = 5, Max = 25, Default = 13 },
 	Callback = function(value) size = value end
@@ -228,6 +281,38 @@ hitbox_tab:Slider({
 	Step = 0.1,
 	Value = { Min = 0.3, Max = 1, Default = 0.5 },
 	Callback = function(value) transparency = value end
+})
+
+hitbox_tab:Toggle({
+	Title = "Enable Torso Expander",
+	Desc = "Turn torso expander on/off (for body shots)",
+	Type = "Checkbox",
+	Icon = "check",
+	Value = false,
+	Callback = function(state)
+		torsoExpanded = state
+		if not state then
+			for _, plr in Players:GetPlayers() do
+				ResizeTorso(plr, 0)
+			end
+		end
+	end
+})
+
+hitbox_tab:Slider({
+	Title = "Torso Size",
+	Desc = "Higher = bigger torso hitbox",
+	Step = 1,
+	Value = { Min = 5, Max = 25, Default = 13 },
+	Callback = function(value) torsoSize = value end
+})
+
+hitbox_tab:Slider({
+	Title = "Torso Transparency",
+	Desc = "Visibility of expanded torsos",
+	Step = 0.1,
+	Value = { Min = 0.3, Max = 1, Default = 0.5 },
+	Callback = function(value) torsoTransparency = value end
 })
 
 local allTeams = {}
@@ -248,6 +333,15 @@ teams_tab:Dropdown({
 					ResizeHead(plr, size)
 				else
 					ResizeHead(plr, 0)
+				end
+			end
+		end
+		if torsoExpanded then
+			for _, plr in Players:GetPlayers() do
+				if shouldAffectPlayer(plr) then
+					ResizeTorso(plr, torsoSize)
+				else
+					ResizeTorso(plr, 0)
 				end
 			end
 		end
@@ -314,7 +408,6 @@ local function updateVisuals()
 		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 		local head = character and character:FindFirstChild("Head")
 
-		-- Aggressive cleanup for dead / missing characters
 		if not character or not humanoid or humanoid.Health <= 0 or not rootPart or not humanoid.Parent then
 			removePlayerESP(player)
 			continue
@@ -426,7 +519,6 @@ local function updateVisuals()
 		end
 	end
 
-	-- Clean up any leftover drawings from players who left
 	for player, _ in pairs(ESP.Boxes) do
 		if not currentPlayers[player] then
 			removePlayerESP(player)
@@ -1128,6 +1220,8 @@ config_tab:Button({
 		local data = {
 			size = size,
 			transparency = transparency,
+			torsoSize = torsoSize,
+			torsoTransparency = torsoTransparency,
 			walkSpeed = walkSpeed,
 			showHealth = showHealth,
 			showName = showName,
@@ -1154,6 +1248,8 @@ config_tab:Dropdown({
 			local c = configs[name]
 			size = c.size or 13
 			transparency = c.transparency or 0.5
+			torsoSize = c.torsoSize or 13
+			torsoTransparency = c.torsoTransparency or 0.5
 			walkSpeed = c.walkSpeed or 16
 			showHealth = c.showHealth or false
 			showName = c.showName or false
@@ -1208,6 +1304,11 @@ RunService.Heartbeat:Connect(function()
 			ResizeHead(player, size)
 		end
 	end
+	if torsoExpanded then
+		for _, player in Players:GetPlayers() do
+			ResizeTorso(player, torsoSize)
+		end
+	end
 end)
 
 RunService.RenderStepped:Connect(updateVisuals)
@@ -1217,6 +1318,7 @@ Players.PlayerAdded:Connect(function(newPlayer)
 	newPlayer.CharacterAdded:Connect(function()
 		task.wait(0.6)
 		if expanded then ResizeHead(newPlayer, size) end
+		if torsoExpanded then ResizeTorso(newPlayer, torsoSize) end
 	end)
 	newPlayer.CharacterRemoving:Connect(function()
 		removePlayerESP(newPlayer)
@@ -1228,6 +1330,7 @@ for _, plr in Players:GetPlayers() do
 		plr.CharacterAdded:Connect(function()
 			task.wait(0.6)
 			if expanded then ResizeHead(plr, size) end
+			if torsoExpanded then ResizeTorso(plr, torsoSize) end
 		end)
 		plr.CharacterRemoving:Connect(function()
 			removePlayerESP(plr)
