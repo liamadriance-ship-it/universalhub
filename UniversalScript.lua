@@ -204,7 +204,7 @@ local function ResizeTorso(targetPlayer, newSize)
 	if not shouldAffectPlayer(targetPlayer) then
 		local character = targetPlayer.Character
 		if character then
-			for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
+			for _, name in ipairs({"HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
 				local part = character:FindFirstChild(name)
 				if part and originalSizes[part] then
 					part.Size = originalSizes[part]
@@ -220,7 +220,7 @@ local function ResizeTorso(targetPlayer, newSize)
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid and humanoid.Health <= 0 then
-		for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
+		for _, name in ipairs({"HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
 			local part = character:FindFirstChild(name)
 			if part and originalSizes[part] then
 				part.Size = originalSizes[part]
@@ -230,13 +230,31 @@ local function ResizeTorso(targetPlayer, newSize)
 		return
 	end
 
+	-- Expand HumanoidRootPart first (most important for body shots)
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		if not originalSizes[hrp] then
+			originalSizes[hrp] = hrp.Size
+		end
+		if newSize <= 0 then
+			hrp.Size = originalSizes[hrp]
+			hrp.Transparency = 1
+		else
+			hrp.Size = Vector3.new(newSize, newSize, newSize)
+			hrp.Transparency = torsoTransparency
+			hrp.CanCollide = false
+			hrp.Massless = true
+			hrp.Anchored = false
+		end
+	end
+
+	-- Also expand torso parts for better coverage
 	for _, name in ipairs({"UpperTorso", "LowerTorso", "Torso"}) do
 		local part = character:FindFirstChild(name)
 		if part then
 			if not originalSizes[part] then
 				originalSizes[part] = part.Size
 			end
-
 			if newSize <= 0 then
 				part.Size = originalSizes[part]
 				part.Transparency = 1
@@ -284,8 +302,8 @@ hitbox_tab:Slider({
 })
 
 hitbox_tab:Toggle({
-	Title = "Enable Torso Expander",
-	Desc = "Turn torso expander on/off (for body shots)",
+	Title = "Enable Torso / Body Expander",
+	Desc = "Expands HumanoidRootPart + Torso (for body shots)",
 	Type = "Checkbox",
 	Icon = "check",
 	Value = false,
@@ -300,8 +318,8 @@ hitbox_tab:Toggle({
 })
 
 hitbox_tab:Slider({
-	Title = "Torso Size",
-	Desc = "Higher = bigger torso hitbox",
+	Title = "Torso / Body Size",
+	Desc = "Higher = bigger body hitbox",
 	Step = 1,
 	Value = { Min = 5, Max = 25, Default = 13 },
 	Callback = function(value) torsoSize = value end
@@ -309,7 +327,7 @@ hitbox_tab:Slider({
 
 hitbox_tab:Slider({
 	Title = "Torso Transparency",
-	Desc = "Visibility of expanded torsos",
+	Desc = "Visibility of expanded body",
 	Step = 0.1,
 	Value = { Min = 0.3, Max = 1, Default = 0.5 },
 	Callback = function(value) torsoTransparency = value end
