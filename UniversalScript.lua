@@ -109,12 +109,13 @@ local headTransparency = 0.5
 local headExpanded = false
 local originalSizes = {}
 
--- HumanoidRootPart Expander (from the script you sent)
+-- HumanoidRootPart Expander
 local hrpSize = 10
 local hrpTransparency = 0.7
 local hrpExpanded = false
 local playerList = {}
 
+local wallCheck = true
 local selectedTeams = {}
 local boxEspEnabled = false
 local showHealth = false
@@ -161,8 +162,74 @@ local function shouldAffectPlayer(targetPlayer)
 	return false
 end
 
+-- Improved wall check that allows head peeking
+local function hasLineOfSightToHead(targetPlayer)
+	if not wallCheck then return true end
+
+	local myChar = LocalPlayer.Character
+	local targetChar = targetPlayer.Character
+	if not myChar or not targetChar then return false end
+
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Head")
+	local targetHead = targetChar:FindFirstChild("Head")
+	if not myRoot or not targetHead then return false end
+
+	local origin = myRoot.Position
+	local targetPos = targetHead.Position
+	local direction = targetPos - origin
+	local distance = direction.Magnitude
+	if distance < 1 then return true end
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = {myChar} -- only exclude ourselves so we can hit the target
+	rayParams.IgnoreWater = true
+
+	local result = workspace:Raycast(origin, direction, rayParams)
+
+	-- Clear path
+	if not result then
+		return true
+	end
+
+	-- If the ray hits the target's character (especially the Head), allow it (head is peeking)
+	if result.Instance:IsDescendantOf(targetChar) then
+		local distToHit = (result.Position - origin).Magnitude
+		-- Allow if we hit close to the head (within 4 studs) = peeking
+		return math.abs(distToHit - distance) < 4
+	end
+
+	-- Hit a wall / map part first → fully behind wall
+	return false
+end
+
+-- Stricter check for HRP (body)
+local function hasLineOfSightToHRP(targetPlayer)
+	if not wallCheck then return true end
+
+	local myChar = LocalPlayer.Character
+	local targetChar = targetPlayer.Character
+	if not myChar or not targetChar then return false end
+
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Head")
+	local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot or not targetRoot then return false end
+
+	local origin = myRoot.Position
+	local targetPos = targetRoot.Position
+	local direction = targetPos - origin
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = {myChar, targetChar}
+	rayParams.IgnoreWater = true
+
+	local result = workspace:Raycast(origin, direction, rayParams)
+	return result == nil
+end
+
 local function ResizeHead(targetPlayer, newSize)
-	if not shouldAffectPlayer(targetPlayer) then
+	if not shouldAffectPlayer(targetPlayer) or not hasLineOfSightToHead(targetPlayer) then
 		local character = targetPlayer.Character
 		if character then
 			local head = character:FindFirstChild("Head")
@@ -219,7 +286,7 @@ local function applyHRP(player, enabled)
 	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
 
-	if enabled and shouldAffectPlayer(player) then
+	if enabled and shouldAffectPlayer(player) and hasLineOfSightToHRP(player) then
 		hrp.Size = Vector3.new(hrpSize, hrpSize, hrpSize)
 		hrp.Transparency = hrpTransparency
 		hrp.BrickColor = BrickColor.new("Tan")
@@ -237,7 +304,7 @@ end
 -- Head Expander UI
 hitbox_tab:Toggle({
 	Title = "Enable Head Expander",
-	Desc = "Expand the Head",
+	Desc = "Expand the Head (supports peeking)",
 	Type = "Checkbox",
 	Icon = "check",
 	Value = false,
@@ -255,7 +322,7 @@ hitbox_tab:Slider({
 	Title = "Head Size",
 	Desc = "Size of the expanded Head",
 	Step = 1,
-	Value = { Min = 5, Max = 25, Default = 13 },
+	Value = { Min = 5, Max = 100, Default = 13 },
 	Callback = function(value) headSize = value end
 })
 
@@ -297,6 +364,17 @@ hitbox_tab:Slider({
 	Step = 0.05,
 	Value = { Min = 0, Max = 1, Default = 0.7 },
 	Callback = function(value) hrpTransparency = value end
+})
+
+hitbox_tab:Toggle({
+	Title = "Wall Check",
+	Desc = "Only expand if visible / head is peeking",
+	Type = "Checkbox",
+	Icon = "check",
+	Value = true,
+	Callback = function(state)
+		wallCheck = state
+	end
 })
 
 local allTeams = {}
@@ -1205,6 +1283,7 @@ config_tab:Button({
 			headTransparency = headTransparency,
 			hrpSize = hrpSize,
 			hrpTransparency = hrpTransparency,
+			wallCheck = wallCheck,
 			walkSpeed = walkSpeed,
 			showHealth = showHealth,
 			showName = showName,
@@ -1233,6 +1312,7 @@ config_tab:Dropdown({
 			headTransparency = c.headTransparency or 0.5
 			hrpSize = c.hrpSize or 10
 			hrpTransparency = c.hrpTransparency or 0.7
+			wallCheck = c.wallCheck ~= false
 			walkSpeed = c.walkSpeed or 16
 			showHealth = c.showHealth or false
 			showName = c.showName or false
@@ -1290,18 +1370,13 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- HumanoidRootPart expander loop (same style as the script you sent)
+-- HumanoidRootPart expander loop
 RunService.RenderStepped:Connect(function()
 	if hrpExpanded then
 		refreshPlayerList()
 		for _, player in ipairs(playerList) do
-			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and shouldAffectPlayer(player) then
-				local hrp = player.Character.HumanoidRootPart
-				hrp.Size = Vector3.new(hrpSize, hrpSize, hrpSize)
-				hrp.Transparency = hrpTransparency
-				hrp.BrickColor = BrickColor.new("Tan")
-				hrp.Material = Enum.Material.Neon
-				hrp.CanCollide = false
+			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+				applyHRP(player, true)
 			end
 		end
 	end
