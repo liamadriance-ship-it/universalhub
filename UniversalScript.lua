@@ -162,7 +162,7 @@ local function shouldAffectPlayer(targetPlayer)
 	return false
 end
 
--- Improved wall check that allows head peeking
+-- Fixed wall check that properly allows head peeking
 local function hasLineOfSightToHead(targetPlayer)
 	if not wallCheck then return true end
 
@@ -170,40 +170,35 @@ local function hasLineOfSightToHead(targetPlayer)
 	local targetChar = targetPlayer.Character
 	if not myChar or not targetChar then return false end
 
-	local myRoot = myChar:FindFirstChild("HumanoidRootPart") or myChar:FindFirstChild("Head")
 	local targetHead = targetChar:FindFirstChild("Head")
-	if not myRoot or not targetHead then return false end
+	if not targetHead then return false end
 
-	local origin = myRoot.Position
-	local targetPos = targetHead.Position
-	local direction = targetPos - origin
-	local distance = direction.Magnitude
-	if distance < 1 then return true end
+	-- Use camera position for more accurate "what I can see"
+	local origin = Camera.CFrame.Position
+	local direction = (targetHead.Position - origin)
 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	rayParams.FilterDescendantsInstances = {myChar} -- only exclude ourselves so we can hit the target
+	rayParams.FilterDescendantsInstances = {myChar}
 	rayParams.IgnoreWater = true
 
 	local result = workspace:Raycast(origin, direction, rayParams)
 
-	-- Clear path
+	-- Clear line of sight
 	if not result then
 		return true
 	end
 
-	-- If the ray hits the target's character (especially the Head), allow it (head is peeking)
+	-- If the ray hits ANY part of the target character → head is visible / peeking
 	if result.Instance:IsDescendantOf(targetChar) then
-		local distToHit = (result.Position - origin).Magnitude
-		-- Allow if we hit close to the head (within 4 studs) = peeking
-		return math.abs(distToHit - distance) < 4
+		return true
 	end
 
-	-- Hit a wall / map part first → fully behind wall
+	-- Hit a wall first
 	return false
 end
 
--- Stricter check for HRP (body)
+-- Stricter check for body (HRP)
 local function hasLineOfSightToHRP(targetPlayer)
 	if not wallCheck then return true end
 
@@ -216,8 +211,7 @@ local function hasLineOfSightToHRP(targetPlayer)
 	if not myRoot or not targetRoot then return false end
 
 	local origin = myRoot.Position
-	local targetPos = targetRoot.Position
-	local direction = targetPos - origin
+	local direction = (targetRoot.Position - origin)
 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -229,26 +223,16 @@ local function hasLineOfSightToHRP(targetPlayer)
 end
 
 local function ResizeHead(targetPlayer, newSize)
-	if not shouldAffectPlayer(targetPlayer) or not hasLineOfSightToHead(targetPlayer) then
-		local character = targetPlayer.Character
-		if character then
-			local head = character:FindFirstChild("Head")
-			if head and originalSizes[head] then
-				head.Size = originalSizes[head]
-				head.Transparency = 1
-			end
-		end
-		return
-	end
-
 	local character = targetPlayer.Character
 	if not character then return end
 
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local head = character:FindFirstChild("Head")
 	if not head then return end
 
-	if humanoid and humanoid.Health <= 0 then
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+	-- Reset if not allowed
+	if not shouldAffectPlayer(targetPlayer) or not hasLineOfSightToHead(targetPlayer) or (humanoid and humanoid.Health <= 0) then
 		if originalSizes[head] then
 			head.Size = originalSizes[head]
 			head.Transparency = 1
@@ -391,11 +375,7 @@ teams_tab:Dropdown({
 		selectedTeams = selected or {}
 		if headExpanded then
 			for _, plr in Players:GetPlayers() do
-				if shouldAffectPlayer(plr) then
-					ResizeHead(plr, headSize)
-				else
-					ResizeHead(plr, 0)
-				end
+				ResizeHead(plr, shouldAffectPlayer(plr) and headSize or 0)
 			end
 		end
 		if hrpExpanded then
@@ -421,35 +401,16 @@ teams_tab:Button({
 })
 
 local function removePlayerESP(player)
-	if ESP.Boxes[player] then
-		pcall(function() ESP.Boxes[player]:Remove() end)
-		ESP.Boxes[player] = nil
-	end
-	if ESP.Tracers[player] then
-		pcall(function() ESP.Tracers[player]:Remove() end)
-		ESP.Tracers[player] = nil
-	end
-	if ESP.HealthBars[player] then
-		pcall(function() ESP.HealthBars[player]:Remove() end)
-		ESP.HealthBars[player] = nil
-	end
-	if ESP.Names[player] then
-		pcall(function() ESP.Names[player]:Remove() end)
-		ESP.Names[player] = nil
-	end
-	if ESP.Distances[player] then
-		pcall(function() ESP.Distances[player]:Remove() end)
-		ESP.Distances[player] = nil
-	end
+	if ESP.Boxes[player] then pcall(function() ESP.Boxes[player]:Remove() end) ESP.Boxes[player] = nil end
+	if ESP.Tracers[player] then pcall(function() ESP.Tracers[player]:Remove() end) ESP.Tracers[player] = nil end
+	if ESP.HealthBars[player] then pcall(function() ESP.HealthBars[player]:Remove() end) ESP.HealthBars[player] = nil end
+	if ESP.Names[player] then pcall(function() ESP.Names[player]:Remove() end) ESP.Names[player] = nil end
+	if ESP.Distances[player] then pcall(function() ESP.Distances[player]:Remove() end) ESP.Distances[player] = nil end
 end
 
 local function clearVisuals()
-	for player, _ in pairs(ESP.Boxes) do
-		removePlayerESP(player)
-	end
-	for player, _ in pairs(ESP.Tracers) do
-		removePlayerESP(player)
-	end
+	for player, _ in pairs(ESP.Boxes) do removePlayerESP(player) end
+	for player, _ in pairs(ESP.Tracers) do removePlayerESP(player) end
 end
 
 local function updateVisuals()
@@ -461,7 +422,6 @@ local function updateVisuals()
 	local currentPlayers = {}
 	for _, player in ipairs(Players:GetPlayers()) do
 		currentPlayers[player] = true
-
 		if player == LocalPlayer then continue end
 
 		local character = player.Character
@@ -581,14 +541,10 @@ local function updateVisuals()
 	end
 
 	for player, _ in pairs(ESP.Boxes) do
-		if not currentPlayers[player] then
-			removePlayerESP(player)
-		end
+		if not currentPlayers[player] then removePlayerESP(player) end
 	end
 	for player, _ in pairs(ESP.Tracers) do
-		if not currentPlayers[player] then
-			removePlayerESP(player)
-		end
+		if not currentPlayers[player] then removePlayerESP(player) end
 	end
 end
 
@@ -673,18 +629,14 @@ if isCreator and scp_tab then
 		local scp096 = scpsFolder:FindFirstChild("SCP-096")
 		if scp096 then
 			local model096 = scp096:FindFirstChild("096")
-			if model096 then
-				applySCPOutline(model096)
-			end
+			if model096 then applySCPOutline(model096) end
 		end
 
 		local scp457 = scpsFolder:FindFirstChild("SCP-457")
 		if scp457 then
 			applySCPOutline(scp457)
 			for _, part in ipairs(scp457:GetDescendants()) do
-				if part:IsA("BasePart") then
-					applySCPOutline(part)
-				end
+				if part:IsA("BasePart") then applySCPOutline(part) end
 			end
 		end
 
@@ -692,9 +644,7 @@ if isCreator and scp_tab then
 		if scp173 then
 			applySCPOutline(scp173)
 			for _, part in ipairs(scp173:GetDescendants()) do
-				if part:IsA("BasePart") then
-					applySCPOutline(part)
-				end
+				if part:IsA("BasePart") then applySCPOutline(part) end
 			end
 		end
 	end
@@ -706,11 +656,7 @@ if isCreator and scp_tab then
 		Value = false,
 		Callback = function(state)
 			scpOutlineEnabled = state
-			if not state then
-				clearSCPHighlights()
-			else
-				updateSCPOutlines()
-			end
+			if not state then clearSCPHighlights() else updateSCPOutlines() end
 		end
 	})
 
@@ -719,16 +665,11 @@ if isCreator and scp_tab then
 		Desc = "Instantly trigger nearby ProximityPrompts",
 		Type = "Checkbox",
 		Value = false,
-		Callback = function(state)
-			instantProximity = state
-		end
+		Callback = function(state) instantProximity = state end
 	})
 
 	RunService.Heartbeat:Connect(function()
-		if scpOutlineEnabled then
-			updateSCPOutlines()
-		end
-
+		if scpOutlineEnabled then updateSCPOutlines() end
 		if instantProximity then
 			for _, prompt in ipairs(workspace:GetDescendants()) do
 				if prompt:IsA("ProximityPrompt") and prompt.Enabled then
@@ -760,9 +701,7 @@ end
 local function getPlayerList()
 	local list = {}
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer then
-			table.insert(list, player.Name)
-		end
+		if player ~= LocalPlayer then table.insert(list, player.Name) end
 	end
 	return list
 end
@@ -772,9 +711,7 @@ spectateDropdown = spectate_tab:Dropdown({
 	Title = "Select Player",
 	Desc = "Choose who to spectate",
 	Values = getPlayerList(),
-	Callback = function(selectedName)
-		selectedSpectatePlayer = selectedName
-	end
+	Callback = function(selectedName) selectedSpectatePlayer = selectedName end
 })
 
 spectate_tab:Button({
@@ -806,25 +743,18 @@ spectate_tab:Button({
 	Title = "Refresh Player List",
 	Desc = "Update the dropdown",
 	Callback = function()
-		local newList = getPlayerList()
-		pcall(function()
-			spectateDropdown:SetValues(newList)
-		end)
+		pcall(function() spectateDropdown:SetValues(getPlayerList()) end)
 	end
 })
 
 Players.PlayerAdded:Connect(function(player)
 	task.wait(0.5)
-	pcall(function()
-		spectateDropdown:SetValues(getPlayerList())
-	end)
+	pcall(function() spectateDropdown:SetValues(getPlayerList()) end)
 end)
 
 Players.PlayerRemoving:Connect(function(player)
 	removePlayerESP(player)
-	pcall(function()
-		spectateDropdown:SetValues(getPlayerList())
-	end)
+	pcall(function() spectateDropdown:SetValues(getPlayerList()) end)
 	if currentSpectate == player then
 		currentSpectate = nil
 		local char = LocalPlayer.Character
@@ -859,9 +789,7 @@ movement_tab:Toggle({
 	Desc = "Walk through walls",
 	Type = "Checkbox",
 	Value = false,
-	Callback = function(state)
-		noclipEnabled = state
-	end
+	Callback = function(state) noclipEnabled = state end
 })
 
 movement_tab:Toggle({
@@ -896,9 +824,7 @@ movement_tab:Toggle({
 	Desc = "Jump infinitely",
 	Type = "Checkbox",
 	Value = false,
-	Callback = function(state)
-		infiniteJump = state
-	end
+	Callback = function(state) infiniteJump = state end
 })
 
 UserInputService.JumpRequest:Connect(function()
@@ -915,9 +841,7 @@ RunService.Stepped:Connect(function()
 		local char = LocalPlayer.Character
 		if char then
 			for _, part in ipairs(char:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.CanCollide = false
-				end
+				if part:IsA("BasePart") then part.CanCollide = false end
 			end
 		end
 	end
@@ -966,27 +890,21 @@ aim_tab:Keybind({
 	Title = "Aimbot Keybind",
 	Desc = "Key to toggle aimbot",
 	Value = nil,
-	Callback = function(key)
-		aimbotKey = key
-	end
+	Callback = function(key) aimbotKey = key end
 })
 
 aim_tab:Keybind({
 	Title = "Silent Aim Keybind",
 	Desc = "Key to toggle silent aim",
 	Value = nil,
-	Callback = function(key)
-		silentAimKey = key
-	end
+	Callback = function(key) silentAimKey = key end
 })
 
 aim_tab:Keybind({
 	Title = "Trigger Bot Keybind",
 	Desc = "Key to toggle trigger bot",
 	Value = nil,
-	Callback = function(key)
-		triggerBotKey = key
-	end
+	Callback = function(key) triggerBotKey = key end
 })
 
 aim_tab:Toggle({
@@ -1067,9 +985,7 @@ additionals_tab:Toggle({
 	Desc = "Fling people while walking (no spinning)",
 	Type = "Checkbox",
 	Value = false,
-	Callback = function(state)
-		walkFlingEnabled = state
-	end
+	Callback = function(state) walkFlingEnabled = state end
 })
 
 additionals_tab:Slider({
@@ -1108,15 +1024,11 @@ additionals_tab:Toggle({
 	Desc = "Notify when staff joins",
 	Type = "Checkbox",
 	Value = true,
-	Callback = function(state)
-		staffDetection = state
-	end
+	Callback = function(state) staffDetection = state end
 })
 
 local function isStaff(player)
-	local success, groups = pcall(function()
-		return player:GetGroupsAsync()
-	end)
+	local success, groups = pcall(function() return player:GetGroupsAsync() end)
 	if not success then return false end
 	for _, group in ipairs(groups) do
 		local role = string.lower(group.Role)
@@ -1265,9 +1177,7 @@ config_tab:Input({
 	Title = "Config Name",
 	Desc = "Name for saving config",
 	Value = "",
-	Callback = function(text)
-		selectedConfig = text
-	end
+	Callback = function(text) selectedConfig = text end
 })
 
 config_tab:Button({
@@ -1293,9 +1203,7 @@ config_tab:Button({
 		configs[selectedConfig] = data
 		table.insert(configNames, selectedConfig)
 		if writefile then
-			pcall(function()
-				writefile("UniversalConfigs.json", HttpService:JSONEncode(configs))
-			end)
+			pcall(function() writefile("UniversalConfigs.json", HttpService:JSONEncode(configs)) end)
 		end
 		WindUI:Notify({Title = "Config", Content = "Saved: " .. selectedConfig, Duration = 3})
 	end
@@ -1332,15 +1240,10 @@ config_tab:Dropdown({
 		if configs[name] then
 			configs[name] = nil
 			for i, v in ipairs(configNames) do
-				if v == name then
-					table.remove(configNames, i)
-					break
-				end
+				if v == name then table.remove(configNames, i) break end
 			end
 			if writefile then
-				pcall(function()
-					writefile("UniversalConfigs.json", HttpService:JSONEncode(configs))
-				end)
+				pcall(function() writefile("UniversalConfigs.json", HttpService:JSONEncode(configs)) end)
 			end
 			WindUI:Notify({Title = "Config", Content = "Deleted: " .. name, Duration = 3})
 		end
@@ -1350,9 +1253,7 @@ config_tab:Dropdown({
 if isfile and isfile("UniversalConfigs.json") then
 	pcall(function()
 		configs = HttpService:JSONDecode(readfile("UniversalConfigs.json"))
-		for name in pairs(configs) do
-			table.insert(configNames, name)
-		end
+		for name in pairs(configs) do table.insert(configNames, name) end
 	end)
 end
 
@@ -1361,11 +1262,13 @@ credits_tab:Paragraph({
 	Desc = "Credits to Team Void"
 })
 
--- Head expander loop
+-- Head expander loop (fixed)
 RunService.Heartbeat:Connect(function()
 	if headExpanded then
 		for _, player in Players:GetPlayers() do
-			ResizeHead(player, headSize)
+			if player ~= LocalPlayer then
+				ResizeHead(player, headSize)
+			end
 		end
 	end
 end)
